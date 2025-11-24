@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interesting Gallery | 手帐作品集</title>
+    <meta name="description" content="一个有趣的项目展示集合">
+    <!-- 引入手写字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Indie+Flower&family=Patrick+Hand&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --paper-color: #fdfbf7;
+            --line-color: #e1e8ed;
+            --ink-color: #2c3e50;
+            --accent-color: #ff6b6b;
+            --tape-color: rgba(255, 255, 255, 0.4);
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Patrick Hand', 'Ma Shan Zheng', cursive, sans-serif;
+            background-color: #f0e6d2;
+            background-image: 
+                linear-gradient(45deg, #e6ded0 25%, transparent 25%, transparent 75%, #e6ded0 75%, #e6ded0),
+                linear-gradient(45deg, #e6ded0 25%, transparent 25%, transparent 75%, #e6ded0 75%, #e6ded0);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+            color: var(--ink-color);
+            min-height: 100vh;
+            overflow-x: hidden;
+            padding: 2rem 1rem;
+        }
+
+        /* 笔记本主容器 */
+        .notebook-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: var(--paper-color);
+            box-shadow: 
+                0 1px 4px rgba(0,0,0,0.05), 
+                0 10px 30px rgba(0,0,0,0.1),
+                inset 0 0 40px rgba(0,0,0,0.02);
+            border-radius: 4px;
+            position: relative;
+            padding: 4rem 3rem;
+            min-height: 90vh;
+            /* 格子纸效果 */
+            background-image: 
+                linear-gradient(var(--line-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--line-color) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* 笔记本左侧装订孔效果 (仅在大屏幕显示) */
+        .notebook-container::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            border-left: 2px dashed #dbd1b8;
+            z-index: 2;
+        }
+
+        /* 头部 */
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+            position: relative;
+            transform: rotate(-1deg);
+        }
+
+        h1 {
+            font-family: 'Indie Flower', cursive;
+            font-size: 4rem;
+            font-weight: 700;
+            color: var(--ink-color);
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+            position: relative;
+            display: inline-block;
+        }
+
+        /* 标题下的高光笔效果 */
+        h1::after {
+            content: '';
+            position: absolute;
+            bottom: 10px;
+            left: -10px;
+            right: -10px;
+            height: 15px;
+            background: rgba(255, 235, 59, 0.4);
+            z-index: -1;
+            border-radius: 4px;
+            transform: rotate(-1deg);
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            color: #7f8c8d;
+            font-family: 'Ma Shan Zheng', cursive;
+            transform: rotate(1deg);
+        }
+
+        /* 贴纸装饰 */
+        .sticker {
+            position: absolute;
+            pointer-events: none;
+            z-index: 10;
+            filter: drop-shadow(2px 2px 1px rgba(0,0,0,0.1));
+        }
+
+        .sticker-star {
+            top: 20px;
+            right: 40px;
+            font-size: 3rem;
+            transform: rotate(15deg);
+            color: #f1c40f;
+        }
+
+        .sticker-heart {
+            top: 30px;
+            left: 40px;
+            font-size: 2.5rem;
+            transform: rotate(-20deg);
+            color: #e74c3c;
+        }
+
+        /* 项目网格 */
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 3rem;
+            margin-top: 2rem;
+            padding: 1rem;
+        }
+
+        /* 拍立得风格卡片 */
+        .project-card {
+            background: #fff;
+            padding: 15px 15px 40px 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            transform: rotate(var(--rotation));
+            border: 1px solid #f0f0f0;
+            margin-top: 15px; /* 给图钉留出空间 */
+        }
+
+        /* 图钉效果 */
+        .pin {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #e74c3c, #c0392b);
+            box-shadow: 
+                2px 2px 5px rgba(0,0,0,0.3),
+                inset -2px -2px 5px rgba(0,0,0,0.2);
+            z-index: 20;
+        }
+
+        /* 图钉金属针脚 (视觉上的小细节) */
+        .pin::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 6px;
+            height: 6px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+            filter: blur(1px);
+        }
+
+        .project-card:hover {
+            transform: scale(1.05) rotate(0deg) !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            z-index: 10;
+        }
+
+        /* 占位符卡片样式 */
+        .project-card.placeholder {
+            background: transparent;
+            border: 2px dashed #bdc3c7;
+            box-shadow: none;
+            cursor: default;
+            opacity: 0.8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px; /* 保持与其他卡片近似高度 */
+        }
+
+        .project-card.placeholder:hover {
+            transform: rotate(var(--rotation)) !important; /* 占位符不缩放 */
+            box-shadow: none;
+        }
+
+        .placeholder-text {
+            font-family: 'Ma Shan Zheng', cursive;
+            font-size: 1.5rem;
+            color: #95a5a6;
+            text-align: center;
+            margin-top: 1rem;
+        }
+
+        .card-image-placeholder {
+            width: 100%;
+            height: 180px;
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            color: #bdc3c7;
+            border: 1px solid #eee;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .project-info {
+            text-align: center;
+        }
+
+        .project-title {
+            font-family: 'Patrick Hand', cursive;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #2c3e50;
+        }
+
+        .project-description {
+            font-family: 'Ma Shan Zheng', cursive; /* 中文手写体 */
+            font-size: 1.1rem;
+            color: #7f8c8d;
+            line-height: 1.4;
+            margin-bottom: 1rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .project-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .tag {
+            font-family: 'Patrick Hand', cursive;
+            padding: 0.2rem 0.6rem;
+            background: transparent;
+            border-bottom: 2px solid #a8b8ff;
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        /* 页脚 */
+        footer {
+            text-align: center;
+            margin-top: 5rem;
+            padding: 2rem;
+            color: #95a5a6;
+            font-family: 'Patrick Hand', cursive;
+            font-size: 1.1rem;
+            border-top: 2px dashed #e1e8ed;
+        }
+
+        footer a {
+            color: #e74c3c;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.3s;
+        }
+
+        footer a:hover {
+            border-bottom-color: #e74c3c;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem 0.5rem;
+            }
+
+            .notebook-container {
+                padding: 2rem 1.5rem;
+            }
+
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            .subtitle {
+                font-size: 1.2rem;
+            }
+
+            .projects-grid {
+                grid-template-columns: 1fr;
+                gap: 2.5rem;
+            }
+            
+            .project-card {
+                transform: rotate(0deg) !important; /* 移动端取消旋转，保持整洁 */
+                margin-top: 0; /* 移动端不需要额外顶部空间 */
+            }
+
+            .pin {
+                /* 移动端图钉稍微调整位置，或者保持居中 */
+                top: -10px;
+            }
+            
+            .sticker {
+                display: none; /* 移动端隐藏装饰以节省空间 */
+            }
+        }
+
+        /* 加载动画 - 手绘圈圈 */
+        .loading {
+            text-align: center;
+            padding: 4rem;
+            color: #95a5a6;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 1rem;
+            border: 3px solid #bdc3c7;
+            border-top-color: #e74c3c;
+            border-radius: 50%;
+            animation: spin-loader 1s linear infinite;
+            /* 手绘风格边框 */
+            border-radius: 50% 40% 60% 50% / 50% 50% 50% 50%; 
+        }
+
+        @keyframes spin-loader {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="notebook-container">
+        <!-- 装饰贴纸 -->
+        <div class="sticker sticker-star">★</div>
+        <div class="sticker sticker-heart">♥</div>
+
+        <header>
+            <h1>Interesting Gallery</h1>
+            <p class="subtitle">有趣的项目展示集合 ✨</p>
+        </header>
+
+        <div id="projects-container">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p style="font-family: 'Ma Shan Zheng', cursive;">正在翻开笔记本...</p>
+            </div>
+        </div>
+
+        <footer>
+            <p>Made with ❤️ | <a href="https://github.com/c0sc0s/InterestingGallery" target="_blank">View on GitHub</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // 项目数据
+        const projects = [
+            {
+                name: 'Calculator',
+                title: '无用计算器',
+                description: '一个充满哲学思考的计算器，它不会给你正确的答案，但会给你意想不到的人生启示。',
+                icon: '🧮',
+                tags: ['JavaScript', 'Interactive', 'Philosophy'],
+                path: './Calculator/index.html'
+            }
+            // 未来可以在这里添加更多项目
+        ];
+
+        // 渲染项目卡片
+        function renderProjects() {
+            const container = document.getElementById('projects-container');
+            
+            if (projects.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #95a5a6; font-family: \'Ma Shan Zheng\', cursive;">笔记本是空的...</p>';
+                return;
+            }
+
+            const grid = document.createElement('div');
+            grid.className = 'projects-grid';
+
+            // 渲染现有项目
+            projects.forEach((project, index) => {
+                const card = document.createElement('div');
+                card.className = 'project-card';
+                // 随机旋转角度，增加手帐随意感
+                const rotation = (Math.random() * 6 - 3).toFixed(1); 
+                card.style.setProperty('--rotation', `${rotation}deg`);
+                
+                card.onclick = () => window.location.href = project.path;
+
+                const tagsHTML = project.tags.map(tag => `<span class="tag">#${tag}</span>`).join('');
+
+                card.innerHTML = `
+                    <div class="pin"></div>
+                    <div class="card-image-placeholder">
+                        ${project.icon}
+                    </div>
+                    <div class="project-info">
+                        <h3 class="project-title">${project.title}</h3>
+                        <p class="project-description">${project.description}</p>
+                        <div class="project-tags">${tagsHTML}</div>
+                    </div>
+                `;
+
+                grid.appendChild(card);
+            });
+
+            // 添加 "未完待续" 占位符
+            const placeholderCard = document.createElement('div');
+            placeholderCard.className = 'project-card placeholder';
+            const placeholderRotation = (Math.random() * 4 - 2).toFixed(1);
+            placeholderCard.style.setProperty('--rotation', `${placeholderRotation}deg`);
+            
+            placeholderCard.innerHTML = `
+                <div class="pin" style="background: radial-gradient(circle at 30% 30%, #95a5a6, #7f8c8d);"></div>
+                <div style="font-size: 3rem; color: #bdc3c7; margin-bottom: 1rem;">🔨</div>
+                <div class="placeholder-text">
+                    未完待续<br>
+                    <span style="font-size: 0.9rem; opacity: 0.7;">开发中...</span>
+                </div>
+            `;
+            grid.appendChild(placeholderCard);
+
+            container.innerHTML = '';
+            container.appendChild(grid);
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(renderProjects, 600); 
+        });
+    </script>
+</body>
+</html>
