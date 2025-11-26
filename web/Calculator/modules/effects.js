@@ -179,6 +179,15 @@ export const specialEffects = {
     }
 };
 
+// 特效冷却时间管理
+let lastMajorEffectTime = 0;
+const MAJOR_EFFECT_COOLDOWN = 10000; // 大幅度特效冷却时间10秒
+
+// 特效分类：大幅度特效（全屏、影响操作）
+const MAJOR_EFFECTS = ['bsod', 'gravity', 'scramble', 'disco', 'invert'];
+// 小幅度特效（仅视觉，不影响操作）
+const MINOR_EFFECTS = ['glitch', 'shake', 'dizzy', 'blur'];
+
 /**
  * 触发随机特效
  * @param {HTMLElement} display - 显示元素
@@ -192,11 +201,25 @@ export function triggerRandomEffect(display, calculator, body, buttons, randomCh
     // 清除旧效果
     resetEffects(display, calculator, body, buttons);
 
-    // 35% 概率触发特效
-    if (Math.random() > 0.35) return null;
+    // 降低触发概率到20%
+    if (Math.random() > 0.20) return null;
 
-    const effects = Object.keys(specialEffects);
-    const selectedEffect = randomChoice(effects);
+    const now = Date.now();
+    const timeSinceLastMajor = now - lastMajorEffectTime;
+    
+    // 检查是否在冷却期内
+    const availableEffects = timeSinceLastMajor < MAJOR_EFFECT_COOLDOWN 
+        ? MINOR_EFFECTS  // 冷却期内只使用小幅度特效
+        : Object.keys(specialEffects);  // 冷却期外可以使用所有特效
+    
+    if (availableEffects.length === 0) return null;
+    
+    const selectedEffect = randomChoice(availableEffects);
+    
+    // 如果是大幅度特效，更新冷却时间
+    if (MAJOR_EFFECTS.includes(selectedEffect)) {
+        lastMajorEffectTime = now;
+    }
     
     console.log("Triggering effect:", selectedEffect);
     specialEffects[selectedEffect](display, calculator, body, buttons);

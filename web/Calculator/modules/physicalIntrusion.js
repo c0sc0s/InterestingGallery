@@ -3,6 +3,10 @@
  * 让计算器看起来像是要突破屏幕
  */
 
+// 屏幕裂纹冷却时间
+let lastCrackTime = 0;
+const CRACK_COOLDOWN = 15000; // 15秒冷却
+
 /**
  * 检查是否需要显示屏幕裂纹
  * @param {string} previousInput - 上一个输入
@@ -11,15 +15,20 @@
  * @param {HTMLElement} body - body元素
  */
 export function checkScreenCrack(previousInput, currentInput, operator, body) {
+    // 检查冷却时间
+    const now = Date.now();
+    if (now - lastCrackTime < CRACK_COOLDOWN) return;
+    
     // 检查大数字
     const prev = parseFloat(previousInput);
     const curr = parseFloat(currentInput);
     
     if (isNaN(prev) || isNaN(curr)) return;
     
-    // 如果数字太大，显示裂纹
-    if (prev > 9999 || curr > 9999 || (operator === '×' && prev * curr > 999999)) {
+    // 如果数字太大，显示裂纹（降低触发条件）
+    if (prev > 99999 || curr > 99999 || (operator === '×' && prev * curr > 9999999)) {
         showScreenCrack(body);
+        lastCrackTime = now;
     }
 }
 

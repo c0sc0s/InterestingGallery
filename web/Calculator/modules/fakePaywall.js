@@ -78,8 +78,8 @@ function showPaywall(number, body) {
 export function checkVIPAnswer(display) {
     if (isVIP) return false;
     
-    // 30%概率需要VIP
-    if (Math.random() < 0.3) {
+    // 降低到10%概率需要VIP
+    if (Math.random() < 0.1) {
         applyVIPBlur(display);
         return true;
     }

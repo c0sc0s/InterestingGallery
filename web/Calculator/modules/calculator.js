@@ -58,10 +58,10 @@ export class Calculator {
         // 初始化闹鬼模式
         initGhostMode(this);
         
-        // 定期创建蚂蚁
+        // 定期创建蚂蚁（降低频率到每60秒检查一次）
         setInterval(() => {
             createAnt(this.body);
-        }, 15000);
+        }, 60000);
     }
     
     /**
@@ -312,17 +312,19 @@ export class Calculator {
                 return;
             }
             
-            // 打字完成后触发混沌特效
+            // 打字完成后触发混沌特效（小幅度特效）
             triggerRandomEffect(this.display, this.calculator, this.body, this.buttons, randomChoice);
             playCalculateSound();
             
-            // 偶尔触发全屏烟花（15%概率）
-            if (Math.random() < 0.15) {
+            // 降低全屏烟花概率到5%，且不与大幅度特效同时触发
+            if (Math.random() < 0.05) {
                 createFullscreenFireworks();
             }
             
-            // 偶尔触发按钮融化
-            triggerMelting(this.buttons);
+            // 降低按钮融化概率到2%
+            if (Math.random() < 0.02) {
+                triggerMelting(this.buttons);
+            }
         });
     }
 }

@@ -11,8 +11,8 @@ let isDegraded = false;
  * @param {HTMLElement} body - body元素
  */
 export function checkDegradation(calculator, body) {
-    // 10%概率触发退化
-    if (Math.random() < 0.1 && !isDegraded) {
+    // 降低到3%概率触发退化
+    if (Math.random() < 0.03 && !isDegraded) {
         triggerDegradation(calculator, body);
     }
 }
@@ -63,8 +63,8 @@ function showAbacus(calculator) {
  * @returns {string|null} 预言文本，如果没有则返回null
  */
 export function generateProphecy() {
-    // 20%概率生成预言
-    if (Math.random() < 0.2) {
+    // 降低到8%概率生成预言
+    if (Math.random() < 0.08) {
         const prophecies = [
             "你会在 3 分钟后感到口渴。",
             "小心那把椅子。",

@@ -77,8 +77,8 @@ function resetGhostMode() {
  * @returns {boolean} 是否被篡改
  */
 export function tamperHistory(previousInput, currentInput, operator, history) {
-    // 20%概率篡改
-    if (Math.random() < 0.2) {
+    // 降低到8%概率篡改
+    if (Math.random() < 0.08) {
         const fakeHistories = [
             "我 + 孤独 = ?",
             "虚无 × 时间 = 永恒",
