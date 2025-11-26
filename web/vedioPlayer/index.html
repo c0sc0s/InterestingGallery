@@ -320,6 +320,20 @@
         box-shadow: 0 0 20px rgba(45, 215, 96, 0.2);
       }
 
+      .upload-icon {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .upload-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+
       /* --- 金属控制面板 --- */
       .controls-panel {
         margin-top: -15px; /* 稍微嵌入 Bezel */
@@ -363,6 +377,10 @@
         box-shadow: 0 0 0 #1a1a1a, inset 0 2px 5px rgba(0, 0, 0, 0.8);
         background: #2a2a2a;
         color: var(--phosphor-main);
+      }
+      .btn-physical.active svg,
+      .btn-physical:active svg {
+        fill: var(--phosphor-main);
       }
       /* Stop 按钮特殊色 */
       #btn-stop {
@@ -415,6 +433,13 @@
         background: #555;
         color: #fff;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      }
+      .mode-btn.active svg {
+        fill: #fff;
+      }
+      .mode-btn svg {
+        fill: #666;
+        transition: fill 0.2s;
       }
 
       /* 复古滑块 */
@@ -733,7 +758,7 @@
             id="osd-play"
             style="display: none"
           >
-            ▶ PLAY <br />
+            <span class="osd-icon-play"></span> PLAY <br />
             <span class="text-lg opacity-70">SP</span>
           </div>
           <div class="osd-text bottom-8 right-8 text-right">
@@ -756,7 +781,7 @@
 
           <!-- 上传 UI -->
           <label class="upload-zone" id="upload-ui">
-            <div class="text-4xl mb-2 text-white">📼</div>
+            <div class="upload-icon mb-2" id="upload-icon"></div>
             <div class="font-bold">Insert Tape</div>
             <div class="text-xs mt-2 opacity-60">MP4 / WEBM / MOV</div>
             <input type="file" id="file-input" accept="video/*" />
@@ -782,13 +807,13 @@
 
         <div class="flex-1 flex justify-center gap-4">
           <div class="control-group">
-            <button class="btn-physical" id="btn-play" title="Play">▶</button>
+            <button class="btn-physical" id="btn-play" title="Play"></button>
           </div>
           <div class="control-group">
-            <button class="btn-physical" id="btn-pause" title="Pause">⏸</button>
+            <button class="btn-physical" id="btn-pause" title="Pause"></button>
           </div>
           <div class="control-group">
-            <button class="btn-physical" id="btn-stop" title="Eject">⏹</button>
+            <button class="btn-physical" id="btn-stop" title="Eject"></button>
           </div>
         </div>
 
@@ -798,28 +823,25 @@
           <div class="mode-switch">
             <button
               class="mode-btn active"
+              id="mode-vhs"
               onclick="setFilter('filter-vhs', this)"
               title="VHS Mode"
-            >
-              📼
-            </button>
+            ></button>
             <button
               class="mode-btn"
+              id="mode-bw"
               onclick="setFilter('filter-bw', this)"
               title="Black & White"
-            >
-              ⚫
-            </button>
+            ></button>
             <button
               class="mode-btn"
+              id="mode-cyber"
               onclick="setFilter('filter-cyber', this)"
               title="Cyber"
-            >
-              ⚡
-            </button>
+            ></button>
           </div>
           <div class="flex items-center gap-2">
-            <span class="control-label">📡</span>
+            <span class="control-label" id="tracking-icon"></span>
             <input
               type="range"
               min="0"
@@ -837,6 +859,56 @@
     </div>
 
     <script>
+      // SVG 图标函数
+      const Icons = {
+        play: (size = 24, color = "currentColor") => `
+          <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        `,
+        pause: (size = 24, color = "currentColor") => `
+          <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+          </svg>
+        `,
+        stop: (size = 24, color = "currentColor") => `
+          <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 6h12v12H6z"/>
+          </svg>
+        `,
+        vhs: (size = 24, color = "currentColor") => `
+          <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v8H8V8zm1 1v6h6V9H9z"/>
+            <circle cx="10.5" cy="11.5" r="0.5"/>
+            <circle cx="13.5" cy="11.5" r="0.5"/>
+          </svg>
+        `,
+        blackWhite: (size = 24, color = "currentColor") => `
+          <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10"/>
+          </svg>
+        `,
+        lightning: (size = 24, color = "currentColor") => `
+          <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/>
+          </svg>
+        `,
+        satellite: (size = 24, color = "currentColor") => `
+          <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+            <path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/>
+            <circle cx="12" cy="12" r="1.5"/>
+          </svg>
+        `,
+        tape: (size = 24, color = "currentColor") => `
+          <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v8H8V8zm1 1v6h6V9H9z"/>
+            <circle cx="10.5" cy="11.5" r="0.5"/>
+            <circle cx="13.5" cy="11.5" r="0.5"/>
+          </svg>
+        `,
+      };
+
       const video = document.getElementById("video-player");
       const fileInput = document.getElementById("file-input");
       const uploadUI = document.getElementById("upload-ui");
@@ -847,6 +919,59 @@
       const btnPause = document.getElementById("btn-pause");
       const trackingControl = document.getElementById("tracking-control");
       const noiseCanvas = document.getElementById("noise-canvas");
+
+      // 初始化按钮图标
+      btnPlay.innerHTML = Icons.play(20, "#bbb");
+      btnPause.innerHTML = Icons.pause(20, "#bbb");
+      document.getElementById("btn-stop").innerHTML = Icons.stop(20, "#ff6b6b");
+
+      // 初始化模式按钮图标
+      document.getElementById("mode-vhs").innerHTML = Icons.vhs(18, "#fff"); // active状态
+      document.getElementById("mode-bw").innerHTML = Icons.blackWhite(
+        18,
+        "#666"
+      );
+      document.getElementById("mode-cyber").innerHTML = Icons.lightning(
+        18,
+        "#666"
+      );
+
+      // 初始化tracking图标
+      document.getElementById("tracking-icon").innerHTML = Icons.satellite(
+        16,
+        "#888"
+      );
+
+      // 初始化上传图标
+      document.getElementById("upload-icon").innerHTML = Icons.tape(48, "#fff");
+
+      // OSD文本生成函数
+      function getOSDText(type, showSpeed = true) {
+        const iconSize = 20;
+        const iconColor = "var(--phosphor-main)";
+        let icon = "";
+        let text = "";
+
+        switch (type) {
+          case "play":
+            icon = Icons.play(iconSize, iconColor);
+            text = "PLAY";
+            break;
+          case "pause":
+            icon = Icons.pause(iconSize, iconColor);
+            text = "PAUSE";
+            break;
+          case "ready":
+            icon = Icons.play(iconSize, iconColor);
+            text = "READY";
+            break;
+        }
+
+        const speedText = showSpeed
+          ? `<br><span class='text-lg opacity-70'>SP</span>`
+          : "";
+        return `${icon} ${text}${speedText}`;
+      }
 
       let isPoweredOn = false;
       let glitchInterval;
@@ -1265,31 +1390,38 @@
           // 标记有待播放的视频
           pendingVideoFile = true;
 
-          // 监听视频加载完成
-          video.addEventListener(
-            "loadedmetadata",
-            () => {
-              connectVideoAudio();
-              // 应用基础做旧效果
-              setTimeout(() => {
-                applyVintageAudio();
-              }, 100);
+          // 立即隐藏上传 UI，显示视频容器（不等待加载完成）
+          uploadUI.style.display = "none";
+          staticNoise.style.display = "none";
+          screen.classList.add("crt-on");
+          screen.classList.remove("crt-off");
 
-              // 视频加载完成后，隐藏上传 UI，显示视频准备就绪状态
-              uploadUI.style.display = "none";
-              staticNoise.style.display = "none";
-              screen.classList.add("crt-on");
-              screen.classList.remove("crt-off");
-              // 显示播放提示
-              osdPlay.style.display = "block";
-              osdPlay.innerHTML =
-                "READY ▶ <br><span class='text-lg opacity-70'>▶</span>";
-              // 移动设备上不设置active状态，等待用户点击播放
-              // btnPlay.classList.add("active"); // 移除这行，避免误导
-              isPoweredOn = false; // 标记为未开启，等待用户点击播放
-            },
-            { once: true }
-          );
+          // 处理视频加载完成的函数
+          const handleVideoReady = () => {
+            connectVideoAudio();
+            // 应用基础做旧效果
+            setTimeout(() => {
+              applyVintageAudio();
+            }, 100);
+
+            // 显示播放提示
+            osdPlay.style.display = "block";
+            osdPlay.innerHTML = getOSDText("ready", false);
+            // 移动设备上不设置active状态，等待用户点击播放
+            isPoweredOn = false; // 标记为未开启，等待用户点击播放
+          };
+
+          // 监听视频加载完成（使用多个事件确保捕获）
+          if (video.readyState >= 1) {
+            // 视频已经加载了元数据
+            handleVideoReady();
+          } else {
+            // 等待视频加载
+            video.addEventListener("loadedmetadata", handleVideoReady, {
+              once: true,
+            });
+            video.addEventListener("canplay", handleVideoReady, { once: true });
+          }
         } else {
           // 桌面设备可以尝试自动播放
           // 监听视频加载完成，连接音频
@@ -1335,8 +1467,7 @@
               // 播放成功
               isPoweredOn = true;
               osdPlay.style.display = "block";
-              osdPlay.innerHTML =
-                "▶ PLAY <br><span class='text-lg opacity-70'>SP</span>";
+              osdPlay.innerHTML = getOSDText("play");
               btnPlay.classList.add("active");
               btnPause.classList.remove("active");
               startGlitchLoop();
@@ -1347,8 +1478,7 @@
               // 保持当前状态，等待用户点击播放按钮
               if (!isMobileDevice()) {
                 // 桌面设备如果播放失败，显示提示
-                osdPlay.innerHTML =
-                  "READY ▶ <br><span class='text-lg opacity-70'>▶</span>";
+                osdPlay.innerHTML = getOSDText("ready", false);
               }
             });
         } else {
@@ -1419,8 +1549,7 @@
                 if (!isPoweredOn) powerOn();
                 btnPlay.classList.add("active");
                 btnPause.classList.remove("active");
-                osdPlay.innerHTML =
-                  "▶ PLAY <br><span class='text-lg opacity-70'>SP</span>";
+                osdPlay.innerHTML = getOSDText("play");
               })
               .catch((error) => {
                 console.log("播放失败:", error);
@@ -1433,8 +1562,7 @@
             if (!isPoweredOn) powerOn();
             btnPlay.classList.add("active");
             btnPause.classList.remove("active");
-            osdPlay.innerHTML =
-              "▶ PLAY <br><span class='text-lg opacity-70'>SP</span>";
+            osdPlay.innerHTML = getOSDText("play");
           }
         }
       });
@@ -1443,8 +1571,7 @@
         if (video.src) video.pause();
         btnPlay.classList.remove("active");
         btnPause.classList.add("active");
-        osdPlay.innerHTML =
-          "⏸ PAUSE <br><span class='text-lg opacity-70'>SP</span>";
+        osdPlay.innerHTML = getOSDText("pause");
       });
 
       document.getElementById("btn-stop").addEventListener("click", eject);
@@ -1454,11 +1581,28 @@
         screen.classList.remove("filter-vhs", "filter-bw", "filter-cyber");
         screen.classList.add(filterClass);
 
-        // 更新按钮状态
-        document
-          .querySelectorAll(".mode-btn")
-          .forEach((b) => b.classList.remove("active"));
+        // 更新按钮状态和图标颜色
+        document.querySelectorAll(".mode-btn").forEach((b) => {
+          b.classList.remove("active");
+          const iconId = b.id;
+          if (iconId === "mode-vhs") {
+            b.innerHTML = Icons.vhs(18, "#666");
+          } else if (iconId === "mode-bw") {
+            b.innerHTML = Icons.blackWhite(18, "#666");
+          } else if (iconId === "mode-cyber") {
+            b.innerHTML = Icons.lightning(18, "#666");
+          }
+        });
         btn.classList.add("active");
+        // 更新激活按钮的图标颜色
+        const iconId = btn.id;
+        if (iconId === "mode-vhs") {
+          btn.innerHTML = Icons.vhs(18, "#fff");
+        } else if (iconId === "mode-bw") {
+          btn.innerHTML = Icons.blackWhite(18, "#fff");
+        } else if (iconId === "mode-cyber") {
+          btn.innerHTML = Icons.lightning(18, "#fff");
+        }
 
         // 切换时制造一点故障
         triggerRandomGlitch();
