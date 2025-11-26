@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Retro CRT Player 1982 Limited Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --phosphor-main: #2dd760;
+        --phosphor-bloom: #7aff9e;
+        --crt-bg: #111;
+        /* 木纹材质颜色 */
+        --wood-dark: #3e2723;
+        --wood-light: #5d4037;
+        --metal-panel: #2a2a2a;
+        --btn-highlight: #444;
+        --btn-shadow: #111;
+      }
+
+      body {
+        background-color: #050505;
+        color: var(--phosphor-main);
+        font-family: "VT323", monospace;
+        overflow: hidden;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-image: radial-gradient(
+          circle at 50% 50%,
+          #1a1a1a 0%,
+          #000 100%
+        );
+        perspective: 1000px;
+      }
+
+      /* --- 电视外壳 (木纹 + 塑料) --- */
+      .tv-casing {
+        /* 木纹生成 */
+        background: linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.6)),
+          repeating-linear-gradient(
+            90deg,
+            var(--wood-dark) 0px,
+            var(--wood-dark) 4px,
+            var(--wood-light) 5px,
+            var(--wood-dark) 10px,
+            var(--wood-light) 12px
+          );
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: inset 2px 2px 5px rgba(255, 255, 255, 0.1),
+          /* 高光 */ inset -5px -5px 15px rgba(0, 0, 0, 0.8),
+          /* 阴影 */ 0 30px 60px rgba(0, 0, 0, 0.9),
+          /* 落地阴影 */ 0 0 0 4px #1a1a1a; /* 外框接缝 */
+        border-bottom: 8px solid #1a0e08;
+        width: 92vw;
+        max-width: 860px;
+        position: relative;
+        transform: rotateX(2deg); /* 微微仰视 */
+      }
+
+      /* 品牌铭牌 */
+      .brand-badge {
+        position: absolute;
+        top: 28px;
+        right: 30px;
+        background: linear-gradient(135deg, #d4af37, #aa8c2c);
+        color: #222;
+        padding: 2px 8px;
+        font-family: "Orbitron", sans-serif;
+        font-size: 0.7rem;
+        font-weight: bold;
+        border-radius: 2px;
+        box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        z-index: 50;
+        letter-spacing: 1px;
+        border: 1px solid #775e18;
+      }
+
+      /* 屏幕边框 (Bezel) */
+      .screen-bezel {
+        background: #111;
+        padding: 15px 15px 30px 15px; /* 底部宽一点 */
+        border-radius: 35px / 28px;
+        box-shadow: inset 0 0 10px #000, 0 0 0 2px #333;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #444; /* 装饰线条 */
+      }
+
+      .crt-screen-container {
+        position: relative;
+        background: #000;
+        border-radius: 60px / 40px; /* 更圆润的显像管 */
+        overflow: hidden;
+        width: 100%;
+        aspect-ratio: 4/3;
+        box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.9);
+        border: 4px solid #000;
+      }
+
+      /* 视频层 - 增加混合模式增强发光感 */
+      video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        position: relative;
+        z-index: 1;
+        opacity: 0;
+        transition: opacity 0.5s;
+      }
+
+      /* 灰尘与划痕层 */
+      .screen-dirt {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48ZmlsdGVyIGlkPSJnoiPjxmZVR1cmJ1bGVuY2UgdHlwZT0iZnJhY3RhbE5vaXNlIiBiYXNlRnJlcXVlbmN5PSIwLjgiIG51bT1vY3RhdmVzPSIzIiBzdGl0Y2hUaWxlcz0ic3RpdGNoIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsdGVyPSJ1cmwoI2cpIiBvcGFjaXR5PSIwLjEiLz48L3N2Zz4=");
+        opacity: 0.15;
+        pointer-events: none;
+        z-index: 15;
+        mix-blend-mode: overlay;
+      }
+
+      /* --- 故障效果类 (Glitch FX) --- */
+      /* 1. 垂直滚动 (V-Hold) */
+      @keyframes v-hold-roll {
+        0% {
+          transform: translateY(0);
+        }
+        100% {
+          transform: translateY(100%);
+        }
+      }
+      .glitch-v-hold video {
+        animation: v-hold-roll 0.2s linear infinite;
+        filter: blur(2px);
+      }
+
+      /* 2. 信号撕裂 (Tear) */
+      .glitch-tear video {
+        transform: skewX(-10deg) scaleX(1.1);
+        filter: contrast(2);
+      }
+
+      /* 3. 色彩丢失 (Chroma Loss) */
+      .glitch-chroma video {
+        filter: grayscale(1) brightness(1.5) !important;
+      }
+
+      /* 扫描线纹理 */
+      .scanlines {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0),
+          rgba(255, 255, 255, 0) 50%,
+          rgba(0, 0, 0, 0.5) 50%,
+          rgba(0, 0, 0, 0.5)
+        );
+        background-size: 100% 3px;
+        z-index: 10;
+        pointer-events: none;
+        opacity: 0.5;
+      }
+
+      /* 屏幕光晕 */
+      .crt-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 11;
+        background: radial-gradient(
+          circle,
+          rgba(20, 20, 20, 0) 60%,
+          rgba(0, 0, 0, 0.7) 100%
+        );
+        pointer-events: none;
+        animation: flicker 0.15s infinite;
+      }
+
+      /* RGB 像素网格 */
+      .rgb-grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 9;
+        background-image: linear-gradient(
+          90deg,
+          rgba(255, 0, 0, 0.1),
+          rgba(0, 255, 0, 0.05),
+          rgba(0, 0, 255, 0.1)
+        );
+        background-size: 3px 100%;
+        pointer-events: none;
+      }
+
+      @keyframes flicker {
+        0% {
+          opacity: 0.92;
+        }
+        50% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.94;
+        }
+      }
+
+      @keyframes turn-on {
+        0% {
+          transform: scale(1, 0.002) skewX(0deg);
+          opacity: 1;
+          filter: brightness(3);
+        }
+        50% {
+          transform: scale(1, 0.002) skewX(0deg);
+          opacity: 1;
+        }
+        70% {
+          transform: scale(1, 1) skewX(0deg);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1, 1) skewX(0deg);
+          opacity: 1;
+        }
+      }
+
+      @keyframes turn-off {
+        0% {
+          transform: scale(1, 1.3) translate3d(0, 0, 0);
+          filter: brightness(1);
+          opacity: 1;
+        }
+        60% {
+          transform: scale(1, 0.001) translate3d(0, 0, 0);
+          filter: brightness(10);
+        }
+        100% {
+          transform: scale(0, 0.001) translate3d(0, 0, 0);
+          filter: brightness(50);
+          opacity: 0;
+        }
+      }
+
+      .crt-on video {
+        animation: turn-on 2s linear forwards;
+        opacity: 1;
+      }
+      .crt-off video {
+        animation: turn-off 0.5s ease-out forwards;
+      }
+
+      /* --- 风格滤镜 (Filters) --- */
+      .filter-vhs video {
+        filter: contrast(1.3) brightness(1.1) saturate(1.2) sepia(0.2)
+          blur(0.6px);
+      }
+      .filter-bw video {
+        filter: grayscale(1) contrast(1.4) brightness(0.9) sepia(0.1);
+      }
+      .filter-cyber video {
+        filter: hue-rotate(45deg) contrast(1.5) saturate(2);
+      }
+
+      /* --- UI 文本 --- */
+      .osd-text {
+        position: absolute;
+        z-index: 12;
+        color: var(--phosphor-main);
+        text-shadow: 0 0 5px var(--phosphor-bloom), 2px 0 0 rgba(255, 0, 0, 0.5),
+          -2px 0 0 rgba(0, 0, 255, 0.5);
+        font-size: 1.5rem;
+        pointer-events: none;
+        opacity: 0.85;
+        letter-spacing: 2px;
+        font-family: "VT323", monospace;
+      }
+
+      .upload-zone {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 20;
+        text-align: center;
+        border: 2px dashed #555;
+        padding: 40px;
+        background: rgba(0, 0, 0, 0.85);
+        color: #888;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-family: sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .upload-zone:hover {
+        border-color: var(--phosphor-main);
+        color: var(--phosphor-main);
+        box-shadow: 0 0 20px rgba(45, 215, 96, 0.2);
+      }
+
+      /* --- 金属控制面板 --- */
+      .controls-panel {
+        margin-top: -15px; /* 稍微嵌入 Bezel */
+        position: relative;
+        z-index: 5;
+        display: flex;
+        gap: 20px;
+        padding: 20px 30px;
+        background: linear-gradient(to bottom, #333, #222);
+        border-radius: 4px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1),
+          0 4px 8px rgba(0, 0, 0, 0.5);
+        align-items: center;
+        border: 1px solid #111;
+      }
+
+      /* 物理按键风格 */
+      .btn-physical {
+        background: linear-gradient(to bottom, #444, #333);
+        border: none;
+        box-shadow: 0 4px 0 #1a1a1a, /* 侧面厚度 */ 0 5px 5px rgba(0, 0, 0, 0.5); /* 阴影 */
+        color: #bbb;
+        padding: 10px 20px;
+        font-family: sans-serif;
+        font-weight: bold;
+        font-size: 0.8rem;
+        cursor: pointer;
+        text-transform: uppercase;
+        border-radius: 4px;
+        transition: all 0.1s;
+        position: relative;
+      }
+      .btn-physical:active,
+      .btn-physical.active {
+        transform: translateY(4px); /* 按下效果 */
+        box-shadow: 0 0 0 #1a1a1a, inset 0 2px 5px rgba(0, 0, 0, 0.8);
+        background: #2a2a2a;
+        color: var(--phosphor-main);
+      }
+      /* Stop 按钮特殊色 */
+      #btn-stop {
+        color: #ff6b6b;
+      }
+      #btn-stop:active {
+        color: #a00;
+      }
+
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+      }
+      .control-label {
+        font-size: 0.6rem;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-family: sans-serif;
+        text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8);
+      }
+
+      /* 模式切换开关 - 看起来像滑动开关 */
+      .mode-switch {
+        display: flex;
+        background: #111;
+        padding: 4px;
+        border-radius: 20px;
+        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.8);
+        border: 1px solid #444;
+      }
+      .mode-btn {
+        background: transparent;
+        border: none;
+        color: #666;
+        padding: 6px 12px;
+        font-size: 0.7rem;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 16px;
+        transition: all 0.2s;
+      }
+      .mode-btn.active {
+        background: #555;
+        color: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      }
+
+      /* 复古滑块 */
+      input[type="range"] {
+        -webkit-appearance: none;
+        width: 100px;
+        height: 6px;
+        background: #111;
+        border-radius: 3px;
+        border: 1px solid #444;
+        outline: none;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 20px;
+        background: #888;
+        border: 1px solid #ccc;
+        border-radius: 2px;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+      }
+
+      input[type="file"] {
+        display: none;
+      }
+
+      #noise-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0.08;
+        pointer-events: none;
+        z-index: 8;
+      }
+
+      /* 装饰用格栅 */
+      .speaker-grill {
+        width: 60px;
+        height: 40px;
+        background: repeating-linear-gradient(0deg, #111, #111 2px, #333 3px);
+        border-radius: 2px;
+        border: 1px solid #000;
+      }
+
+      /* --- 移动端触摸优化 --- */
+      @media (max-width: 768px) {
+        * {
+          -webkit-tap-highlight-color: transparent;
+          -webkit-touch-callout: none;
+        }
+
+        body {
+          overflow-y: auto;
+          padding: 10px;
+          justify-content: flex-start;
+          perspective: none;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        h1 {
+          font-size: 1.2rem !important;
+          margin-bottom: 10px !important;
+          letter-spacing: 0.2em !important;
+        }
+
+        .tv-casing {
+          width: 95vw;
+          max-width: none;
+          padding: 15px;
+          transform: none;
+          margin: 10px 0;
+        }
+
+        .brand-badge {
+          top: 18px;
+          right: 15px;
+          font-size: 0.5rem;
+          padding: 1px 6px;
+        }
+
+        .screen-bezel {
+          padding: 10px 10px 20px 10px;
+          border-radius: 20px / 15px;
+          margin-bottom: 15px;
+        }
+
+        .crt-screen-container {
+          border-radius: 30px / 20px;
+          border: 2px solid #000;
+        }
+
+        .osd-text {
+          font-size: 1rem;
+          letter-spacing: 1px;
+        }
+
+        .osd-text.top-8 {
+          top: 1rem;
+          left: 1rem;
+        }
+
+        .osd-text.bottom-8 {
+          bottom: 1rem;
+          right: 1rem;
+          font-size: 0.9rem;
+        }
+
+        .upload-zone {
+          padding: 30px 20px;
+          font-size: 0.9rem;
+        }
+
+        .upload-zone .text-4xl {
+          font-size: 2rem;
+        }
+
+        .controls-panel {
+          flex-direction: column;
+          gap: 15px;
+          padding: 15px 20px;
+          margin-top: -10px;
+        }
+
+        .controls-panel > .flex-1 {
+          width: 100%;
+          justify-content: space-around;
+        }
+
+        .speaker-grill {
+          display: none; /* 移动端隐藏装饰格栅 */
+        }
+
+        .controls-panel > div.h-10 {
+          display: none; /* 隐藏分隔线 */
+        }
+
+        .btn-physical {
+          padding: 12px 24px;
+          font-size: 0.9rem;
+          min-width: 80px;
+          min-height: 44px; /* 触摸友好尺寸 */
+        }
+
+        .control-group {
+          gap: 8px;
+        }
+
+        .control-label {
+          font-size: 0.55rem;
+        }
+
+        .mode-switch {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .mode-btn {
+          padding: 8px 16px;
+          font-size: 0.75rem;
+          min-height: 36px;
+          flex: 1;
+        }
+
+        input[type="range"] {
+          width: 120px;
+          height: 8px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+          width: 16px;
+          height: 24px;
+        }
+
+        .flex.flex-col.gap-2 {
+          width: 100%;
+          align-items: center;
+        }
+
+        .flex.items-center.gap-2 {
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        #static-noise span {
+          font-size: 1.5rem !important;
+        }
+      }
+
+      @media (max-width: 480px) {
+        body {
+          padding: 5px;
+        }
+
+        h1 {
+          font-size: 1rem !important;
+          margin-bottom: 8px !important;
+        }
+
+        .tv-casing {
+          width: 98vw;
+          padding: 12px;
+        }
+
+        .brand-badge {
+          top: 15px;
+          right: 12px;
+          font-size: 0.45rem;
+          padding: 1px 4px;
+        }
+
+        .screen-bezel {
+          padding: 8px 8px 15px 8px;
+          border-radius: 15px / 10px;
+        }
+
+        .crt-screen-container {
+          border-radius: 20px / 15px;
+        }
+
+        .osd-text {
+          font-size: 0.85rem;
+        }
+
+        .osd-text.top-8 {
+          top: 0.5rem;
+          left: 0.5rem;
+        }
+
+        .osd-text.bottom-8 {
+          bottom: 0.5rem;
+          right: 0.5rem;
+          font-size: 0.75rem;
+        }
+
+        .upload-zone {
+          padding: 20px 15px;
+          font-size: 0.8rem;
+        }
+
+        .upload-zone .text-4xl {
+          font-size: 1.5rem;
+        }
+
+        .controls-panel {
+          padding: 12px 15px;
+          gap: 12px;
+        }
+
+        .btn-physical {
+          padding: 10px 20px;
+          font-size: 0.8rem;
+          min-width: 70px;
+        }
+
+        .mode-btn {
+          padding: 6px 12px;
+          font-size: 0.7rem;
+        }
+
+        input[type="range"] {
+          width: 100px;
+        }
+      }
+
+      /* 横屏模式优化 */
+      @media (max-width: 768px) and (orientation: landscape) {
+        body {
+          overflow-y: auto;
+        }
+
+        .tv-casing {
+          width: 90vw;
+          max-width: 600px;
+        }
+
+        .controls-panel {
+          flex-direction: row;
+          flex-wrap: wrap;
+        }
+
+        .controls-panel > .flex-1 {
+          width: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 顶盖装饰 -->
+    <h1
+      class="text-3xl mb-4 text-white/20 tracking-[0.5em] font-bold uppercase text-center"
+      style="text-shadow: 0 2px 4px black"
+    >
+      Retro Vision
+    </h1>
+
+    <div class="tv-casing">
+      <div class="brand-badge">SONY TRINITRON</div>
+
+      <!-- 屏幕边框 -->
+      <div class="screen-bezel">
+        <div class="crt-screen-container filter-vhs" id="screen">
+          <!-- 视觉特效层 -->
+          <div class="scanlines"></div>
+          <div class="rgb-grid"></div>
+          <div class="screen-dirt"></div>
+          <!-- 新增：屏幕灰尘 -->
+          <div class="crt-overlay"></div>
+          <canvas id="noise-canvas"></canvas>
+
+          <!-- OSD 信息 -->
+          <div
+            class="osd-text top-8 left-8"
+            id="osd-play"
+            style="display: none"
+          >
+            PLAY &#9658; <br />
+            <span class="text-lg opacity-70">SP</span>
+          </div>
+          <div class="osd-text bottom-8 right-8 text-right">
+            <span id="timestamp">00:00:00</span><br />
+            <span id="date-stamp" class="text-xl text-yellow-500 opacity-80"
+              >OCT 21 1985</span
+            >
+          </div>
+
+          <!-- 故障指示器 (Debug用，平时隐藏) -->
+          <div
+            id="glitch-msg"
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-red-600 font-bold border-2 border-red-600 p-2 z-50 hidden bg-black"
+          >
+            TRACKING ERROR
+          </div>
+
+          <!-- 视频元素 -->
+          <video id="video-player" loop playsinline></video>
+
+          <!-- 上传 UI -->
+          <label class="upload-zone" id="upload-ui">
+            <div class="text-4xl mb-2 text-white">&#9167;</div>
+            <div class="font-bold">Insert VHS Tape</div>
+            <div class="text-xs mt-2 opacity-60">MP4 / WEBM / MOV</div>
+            <input type="file" id="file-input" accept="video/*" />
+          </label>
+
+          <!-- 无信号静态 -->
+          <div
+            id="static-noise"
+            class="absolute inset-0 bg-neutral-900 z-0 flex items-center justify-center"
+          >
+            <span
+              class="text-4xl text-white/20 font-mono tracking-widest animate-pulse"
+              >NO SIGNAL</span
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- 物理控制面板 -->
+      <div class="controls-panel">
+        <div class="speaker-grill"></div>
+        <!-- 装饰喇叭 -->
+
+        <div class="flex-1 flex justify-center gap-4">
+          <div class="control-group">
+            <button class="btn-physical" id="btn-play">Play</button>
+            <span class="control-label">Start</span>
+          </div>
+          <div class="control-group">
+            <button class="btn-physical" id="btn-pause">Pause</button>
+            <span class="control-label">Hold</span>
+          </div>
+          <div class="control-group">
+            <button class="btn-physical" id="btn-stop">Eject</button>
+            <span class="control-label">Stop</span>
+          </div>
+        </div>
+
+        <div class="h-10 w-px bg-black/50 border-r border-white/10 mx-2"></div>
+
+        <div class="flex flex-col gap-2 items-center">
+          <div class="mode-switch">
+            <button
+              class="mode-btn active"
+              onclick="setFilter('filter-vhs', this)"
+            >
+              VHS
+            </button>
+            <button class="mode-btn" onclick="setFilter('filter-bw', this)">
+              B/W
+            </button>
+            <button class="mode-btn" onclick="setFilter('filter-cyber', this)">
+              CYB
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="control-label">TRACKING</span>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              value="0"
+              id="tracking-control"
+            />
+          </div>
+        </div>
+
+        <div class="speaker-grill"></div>
+        <!-- 装饰喇叭 -->
+      </div>
+    </div>
+
+    <script>
+      const video = document.getElementById("video-player");
+      const fileInput = document.getElementById("file-input");
+      const uploadUI = document.getElementById("upload-ui");
+      const screen = document.getElementById("screen");
+      const staticNoise = document.getElementById("static-noise");
+      const osdPlay = document.getElementById("osd-play");
+      const btnPlay = document.getElementById("btn-play");
+      const btnPause = document.getElementById("btn-pause");
+      const trackingControl = document.getElementById("tracking-control");
+      const noiseCanvas = document.getElementById("noise-canvas");
+
+      let isPoweredOn = false;
+      let glitchInterval;
+
+      // --- 音频处理系统 (Audio Processing) ---
+      let audioContext = null;
+      let sourceNode = null;
+      let gainNode = null;
+      let lowpassFilter = null;
+      let highpassFilter = null;
+      let distortionNode = null;
+      let noiseGainNode = null;
+      let noiseSource = null;
+      let compressorNode = null;
+      let hasAudio = false;
+      let currentGlitchType = null;
+
+      // 初始化音频上下文
+      function initAudioContext() {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext ||
+            window.webkitAudioContext)();
+
+          // 创建音频节点链
+          gainNode = audioContext.createGain();
+          lowpassFilter = audioContext.createBiquadFilter();
+          highpassFilter = audioContext.createBiquadFilter();
+          distortionNode = audioContext.createWaveShaper();
+          compressorNode = audioContext.createDynamicsCompressor();
+          noiseGainNode = audioContext.createGain();
+
+          // 配置低通滤波器（模拟老式扬声器）
+          lowpassFilter.type = "lowpass";
+          lowpassFilter.frequency.value = 5000; // 默认5kHz
+          lowpassFilter.Q.value = 1;
+
+          // 配置高通滤波器（去除低频噪音）
+          highpassFilter.type = "highpass";
+          highpassFilter.frequency.value = 80;
+          highpassFilter.Q.value = 1;
+
+          // 配置失真（模拟磁带饱和）
+          distortionNode.curve = makeDistortionCurve(20);
+          distortionNode.oversample = "4x";
+
+          // 配置压缩器（模拟磁带压缩）
+          compressorNode.threshold.value = -24;
+          compressorNode.knee.value = 30;
+          compressorNode.ratio.value = 12;
+          compressorNode.attack.value = 0.003;
+          compressorNode.release.value = 0.25;
+
+          // 噪音增益（初始为0）
+          noiseGainNode.gain.value = 0;
+
+          // 连接节点链：source -> highpass -> lowpass -> distortion -> compressor -> gain -> noise -> destination
+          highpassFilter.connect(lowpassFilter);
+          lowpassFilter.connect(distortionNode);
+          distortionNode.connect(compressorNode);
+          compressorNode.connect(gainNode);
+          noiseGainNode.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+
+          // 创建白噪音源
+          createNoiseSource();
+        }
+      }
+
+      // 创建失真曲线
+      function makeDistortionCurve(amount) {
+        const samples = 44100;
+        const curve = new Float32Array(samples);
+        const deg = Math.PI / 180;
+        for (let i = 0; i < samples; i++) {
+          const x = (i * 2) / samples - 1;
+          curve[i] =
+            ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+        }
+        return curve;
+      }
+
+      // 创建白噪音源
+      function createNoiseSource() {
+        if (noiseSource) {
+          noiseSource.stop();
+        }
+        const bufferSize = audioContext.sampleRate * 2;
+        const buffer = audioContext.createBuffer(
+          1,
+          bufferSize,
+          audioContext.sampleRate
+        );
+        const output = buffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
+
+        noiseSource = audioContext.createBufferSource();
+        noiseSource.buffer = buffer;
+        noiseSource.loop = true;
+        noiseSource.connect(noiseGainNode);
+        noiseSource.start(0);
+      }
+
+      // 连接视频音频到音频处理链
+      function connectVideoAudio() {
+        if (!audioContext || !video.src) return;
+
+        try {
+          // 创建媒体源（如果视频没有音频轨道会抛出错误）
+          if (sourceNode) {
+            sourceNode.disconnect();
+            sourceNode = null;
+          }
+
+          sourceNode = audioContext.createMediaElementSource(video);
+          sourceNode.connect(highpassFilter);
+          hasAudio = true;
+
+          // 恢复音频上下文（如果被暂停）
+          if (audioContext.state === "suspended") {
+            audioContext.resume();
+          }
+        } catch (error) {
+          // 视频可能没有音频轨道
+          console.log("视频没有音频轨道或音频上下文初始化失败:", error.message);
+          hasAudio = false;
+          sourceNode = null;
+        }
+      }
+
+      // 应用基础音频做旧效果
+      function applyVintageAudio() {
+        if (!audioContext || !hasAudio) return;
+
+        // 基础做旧：轻微低通、轻微失真、轻微压缩
+        lowpassFilter.frequency.value = 5000;
+        distortionNode.curve = makeDistortionCurve(15);
+        gainNode.gain.value = 0.95; // 稍微降低音量
+        noiseGainNode.gain.value = 0.01; // 轻微背景噪音
+      }
+
+      // 应用音频故障效果（与视频故障同步）
+      function applyAudioGlitch(type, duration, intensity = 1) {
+        if (!audioContext || !hasAudio || !sourceNode) return;
+
+        currentGlitchType = type;
+        const now = audioContext.currentTime;
+        const durationSec = duration / 1000;
+
+        switch (type) {
+          case "glitch-v-hold":
+            // 垂直滚动故障：音调快速变化 + 噪音 + 音量波动
+            // 音量快速波动（模拟滚动）
+            gainNode.gain.setValueAtTime(0.7, now);
+            gainNode.gain.linearRampToValueAtTime(0.9, now + durationSec * 0.3);
+            gainNode.gain.linearRampToValueAtTime(0.6, now + durationSec * 0.6);
+            gainNode.gain.linearRampToValueAtTime(0.95, now + durationSec);
+
+            // 低通频率快速变化（模拟音调波动）
+            const baseFreq = 5000;
+            lowpassFilter.frequency.setValueAtTime(
+              baseFreq - 2000 * intensity,
+              now
+            );
+            lowpassFilter.frequency.linearRampToValueAtTime(
+              baseFreq + 1000 * intensity,
+              now + durationSec * 0.25
+            );
+            lowpassFilter.frequency.linearRampToValueAtTime(
+              baseFreq - 1500 * intensity,
+              now + durationSec * 0.5
+            );
+            lowpassFilter.frequency.linearRampToValueAtTime(
+              baseFreq,
+              now + durationSec
+            );
+
+            // 增加失真
+            distortionNode.curve = makeDistortionCurve(25 + intensity * 15);
+            setTimeout(() => {
+              if (currentGlitchType !== "glitch-v-hold") return;
+              distortionNode.curve = makeDistortionCurve(15);
+            }, duration);
+
+            // 增加噪音
+            noiseGainNode.gain.setValueAtTime(0.15 * intensity, now);
+            noiseGainNode.gain.exponentialRampToValueAtTime(
+              0.01,
+              now + durationSec
+            );
+            break;
+
+          case "glitch-tear":
+            // 撕裂故障：突然静音 + 失真爆发 + 噪音
+            // 音量突然下降然后恢复
+            gainNode.gain.setValueAtTime(0.2, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.95, now + durationSec);
+
+            // 大幅增加失真
+            distortionNode.curve = makeDistortionCurve(50 + intensity * 30);
+            setTimeout(() => {
+              if (currentGlitchType !== "glitch-tear") return;
+              distortionNode.curve = makeDistortionCurve(15);
+            }, duration);
+
+            // 低通频率突然下降（模拟信号丢失）
+            lowpassFilter.frequency.setValueAtTime(2000, now);
+            lowpassFilter.frequency.exponentialRampToValueAtTime(
+              5000,
+              now + durationSec
+            );
+
+            // 噪音爆发
+            noiseGainNode.gain.setValueAtTime(0.25 * intensity, now);
+            noiseGainNode.gain.exponentialRampToValueAtTime(
+              0.01,
+              now + durationSec
+            );
+            break;
+
+          case "glitch-chroma":
+            // 色彩丢失故障：音调下降 + 低通增强 + 轻微失真
+            // 低通频率下降（模拟高频丢失）
+            lowpassFilter.frequency.setValueAtTime(2500, now);
+            lowpassFilter.frequency.exponentialRampToValueAtTime(
+              5000,
+              now + durationSec
+            );
+
+            // 轻微失真增加
+            distortionNode.curve = makeDistortionCurve(20 + intensity * 10);
+            setTimeout(() => {
+              if (currentGlitchType !== "glitch-chroma") return;
+              distortionNode.curve = makeDistortionCurve(15);
+            }, duration);
+
+            // 音量轻微下降
+            gainNode.gain.setValueAtTime(0.85, now);
+            gainNode.gain.linearRampToValueAtTime(0.95, now + durationSec);
+
+            // 增加噪音
+            noiseGainNode.gain.setValueAtTime(0.12 * intensity, now);
+            noiseGainNode.gain.exponentialRampToValueAtTime(
+              0.01,
+              now + durationSec
+            );
+            break;
+        }
+      }
+
+      // 根据tracking值调整音频干扰
+      function applyTrackingAudioInterference(value) {
+        if (!audioContext || !hasAudio) return;
+
+        const intensity = value / 10;
+
+        // 增加噪音
+        noiseGainNode.gain.value = 0.01 + intensity * 0.1;
+
+        // 降低低通频率（模拟信号衰减）
+        lowpassFilter.frequency.value = 5000 - intensity * 2000;
+
+        // 增加失真
+        distortionNode.curve = makeDistortionCurve(15 + intensity * 20);
+
+        // 轻微音调不稳定
+        if (intensity > 0.3) {
+          const wobble = audioContext.createOscillator();
+          const wobbleGain = audioContext.createGain();
+          wobble.type = "sine";
+          wobble.frequency.value = 1 + intensity * 2;
+          wobbleGain.gain.value = intensity * 0.05;
+          wobble.connect(wobbleGain);
+          wobbleGain.connect(lowpassFilter.frequency);
+          wobble.start();
+          wobble.stop(audioContext.currentTime + 0.1);
+        }
+      }
+
+      // --- 1. 日期和时间 ---
+      function updateTime() {
+        const now = new Date();
+        document.getElementById("timestamp").innerText = now.toLocaleTimeString(
+          "en-US",
+          { hour12: false }
+        );
+      }
+      setInterval(updateTime, 1000);
+      updateTime();
+
+      // --- 2. 动态白噪 (Canvas) ---
+      const ctx = noiseCanvas.getContext("2d");
+      const resizeCanvas = () => {
+        noiseCanvas.width = screen.offsetWidth / 2; // 降低分辨率以提升性能
+        noiseCanvas.height = screen.offsetHeight / 2;
+      };
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+
+      function drawNoise() {
+        if (!isPoweredOn && !staticNoise.style.display === "none") return; // 省电
+
+        const w = noiseCanvas.width;
+        const h = noiseCanvas.height;
+        const idata = ctx.createImageData(w, h);
+        const buffer32 = new Uint32Array(idata.data.buffer);
+        const len = buffer32.length;
+
+        for (let i = 0; i < len; i++) {
+          if (Math.random() < 0.15) {
+            // 稍微增加噪点密度
+            buffer32[i] = 0xffffffff;
+          }
+        }
+        ctx.putImageData(idata, 0, 0);
+        requestAnimationFrame(drawNoise);
+      }
+      drawNoise();
+
+      // --- 3. 随机故障系统 (Glitch System) ---
+      function triggerRandomGlitch() {
+        if (!isPoweredOn || video.paused) return;
+
+        // 50% 概率不发生故障，保持画面稳定
+        if (Math.random() > 0.4 && trackingControl.value == 0) return;
+
+        const glitchTypes = ["glitch-v-hold", "glitch-tear", "glitch-chroma"];
+        // 如果 tracking 值高，故障概率和严重程度增加
+        const intensity = Math.max(1, parseInt(trackingControl.value)) / 10;
+
+        // 随机选择一种故障
+        const type =
+          glitchTypes[Math.floor(Math.random() * glitchTypes.length)];
+        const duration = 100 + Math.random() * 400; // 持续 100-500ms
+
+        // 应用视频故障
+        screen.classList.add(type);
+
+        // 应用音频故障（与视频同步）
+        applyAudioGlitch(type, duration, intensity);
+
+        // 伴随白噪爆发
+        const originalOpacity = noiseCanvas.style.opacity;
+        noiseCanvas.style.opacity = 0.3 + Math.random() * 0.4;
+
+        // 恢复正常
+        setTimeout(() => {
+          screen.classList.remove(type);
+          currentGlitchType = null;
+          // 只有当没有手动调节 Tracking 时才恢复低噪点
+          if (trackingControl.value == 0) {
+            noiseCanvas.style.opacity = 0.08;
+          } else {
+            noiseCanvas.style.opacity = 0.08 + trackingControl.value / 15;
+          }
+        }, duration);
+      }
+
+      // 启动故障循环
+      function startGlitchLoop() {
+        clearInterval(glitchInterval);
+        // 每 3-8 秒尝试触发一次故障
+        glitchInterval = setInterval(triggerRandomGlitch, 4000);
+      }
+
+      // --- 4. 播放控制 ---
+      fileInput.addEventListener("change", (e) => {
+        if (e.target.files.length) handleFile(e.target.files[0]);
+      });
+
+      const zone = document.querySelector(".upload-zone");
+      zone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        zone.style.borderColor = "#2dd760";
+      });
+      zone.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        zone.style.borderColor = "#555";
+      });
+      zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.style.borderColor = "#555";
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+      });
+
+      function handleFile(file) {
+        const url = URL.createObjectURL(file);
+        video.src = url;
+
+        // 初始化音频上下文（在用户交互后）
+        initAudioContext();
+
+        // 监听视频加载完成，连接音频
+        video.addEventListener(
+          "loadedmetadata",
+          () => {
+            connectVideoAudio();
+            // 应用基础做旧效果
+            setTimeout(() => {
+              applyVintageAudio();
+            }, 100);
+          },
+          { once: true }
+        );
+
+        powerOn();
+      }
+
+      function powerOn() {
+        if (isPoweredOn) return;
+        uploadUI.style.display = "none";
+        staticNoise.style.display = "none";
+        screen.classList.add("crt-on");
+        screen.classList.remove("crt-off");
+
+        // 确保音频上下文已激活
+        if (audioContext && audioContext.state === "suspended") {
+          audioContext.resume();
+        }
+
+        video.play();
+        isPoweredOn = true;
+        osdPlay.style.display = "block";
+        btnPlay.classList.add("active");
+
+        startGlitchLoop();
+      }
+
+      function eject() {
+        screen.classList.remove("crt-on");
+        screen.classList.add("crt-off");
+        video.pause();
+        clearInterval(glitchInterval); // 停止故障
+
+        // 清理音频资源
+        if (sourceNode) {
+          sourceNode.disconnect();
+          sourceNode = null;
+        }
+        if (noiseSource) {
+          noiseSource.stop();
+          noiseSource = null;
+        }
+        hasAudio = false;
+        currentGlitchType = null;
+
+        osdPlay.style.display = "none";
+        btnPlay.classList.remove("active");
+        btnPause.classList.remove("active");
+
+        setTimeout(() => {
+          video.src = "";
+          isPoweredOn = false;
+          uploadUI.style.display = "block";
+          staticNoise.style.display = "flex";
+          screen.classList.remove("crt-off");
+          fileInput.value = "";
+        }, 600);
+      }
+
+      // 按钮事件
+      btnPlay.addEventListener("click", () => {
+        if (video.src) {
+          // 确保音频上下文已初始化（用户交互时）
+          if (!audioContext) {
+            initAudioContext();
+          }
+          if (audioContext && audioContext.state === "suspended") {
+            audioContext.resume();
+          }
+
+          video.play();
+          if (!isPoweredOn) powerOn();
+          btnPlay.classList.add("active");
+          btnPause.classList.remove("active");
+          osdPlay.innerHTML =
+            "PLAY &#9658; <br><span class='text-lg opacity-70'>SP</span>";
+        }
+      });
+
+      btnPause.addEventListener("click", () => {
+        if (video.src) video.pause();
+        btnPlay.classList.remove("active");
+        btnPause.classList.add("active");
+        osdPlay.innerHTML =
+          "PAUSE || <br><span class='text-lg opacity-70'>SP</span>";
+      });
+
+      document.getElementById("btn-stop").addEventListener("click", eject);
+
+      // --- 5. 滤镜与控制 ---
+      window.setFilter = (filterClass, btn) => {
+        screen.classList.remove("filter-vhs", "filter-bw", "filter-cyber");
+        screen.classList.add(filterClass);
+
+        // 更新按钮状态
+        document
+          .querySelectorAll(".mode-btn")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        // 切换时制造一点故障
+        triggerRandomGlitch();
+      };
+
+      // Tracking 手动干扰
+      trackingControl.addEventListener("input", (e) => {
+        const val = parseInt(e.target.value);
+        if (val > 0) {
+          // 手动增加视频干扰
+          noiseCanvas.style.opacity = 0.08 + val / 15;
+          // 严重时直接应用 CSS 变换
+          video.style.transform = `skewX(${val}deg)`;
+          video.style.filter = `blur(${val * 0.3}px)`;
+
+          // 应用音频干扰（与视频同步）
+          applyTrackingAudioInterference(val);
+
+          // 触发更频繁的随机故障
+          if (Math.random() > 0.7) triggerRandomGlitch();
+        } else {
+          // 恢复正常
+          video.style.transform = "none";
+          video.style.filter = "none";
+          noiseCanvas.style.opacity = 0.08;
+
+          // 恢复音频
+          if (audioContext && hasAudio) {
+            applyVintageAudio();
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
