@@ -345,12 +345,17 @@
         padding: 10px 20px;
         font-family: sans-serif;
         font-weight: bold;
-        font-size: 0.8rem;
+        font-size: 1.2rem;
         cursor: pointer;
-        text-transform: uppercase;
+        text-transform: none;
         border-radius: 4px;
         transition: all 0.1s;
         position: relative;
+        min-width: 50px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .btn-physical:active,
       .btn-physical.active {
@@ -396,11 +401,15 @@
         border: none;
         color: #666;
         padding: 6px 12px;
-        font-size: 0.7rem;
-        font-weight: bold;
+        font-size: 1.1rem;
+        font-weight: normal;
         cursor: pointer;
         border-radius: 16px;
         transition: all 0.2s;
+        min-width: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .mode-btn.active {
         background: #555;
@@ -705,7 +714,7 @@
     </h1>
 
     <div class="tv-casing">
-      <div class="brand-badge">SONY TRINITRON</div>
+      <div class="brand-badge">ROAI PRODUCT</div>
 
       <!-- 屏幕边框 -->
       <div class="screen-bezel">
@@ -724,7 +733,7 @@
             id="osd-play"
             style="display: none"
           >
-            PLAY &#9658; <br />
+            ▶ PLAY <br />
             <span class="text-lg opacity-70">SP</span>
           </div>
           <div class="osd-text bottom-8 right-8 text-right">
@@ -747,8 +756,8 @@
 
           <!-- 上传 UI -->
           <label class="upload-zone" id="upload-ui">
-            <div class="text-4xl mb-2 text-white">&#9167;</div>
-            <div class="font-bold">Insert VHS Tape</div>
+            <div class="text-4xl mb-2 text-white">📼</div>
+            <div class="font-bold">Insert Tape</div>
             <div class="text-xs mt-2 opacity-60">MP4 / WEBM / MOV</div>
             <input type="file" id="file-input" accept="video/*" />
           </label>
@@ -773,16 +782,13 @@
 
         <div class="flex-1 flex justify-center gap-4">
           <div class="control-group">
-            <button class="btn-physical" id="btn-play">Play</button>
-            <span class="control-label">Start</span>
+            <button class="btn-physical" id="btn-play" title="Play">▶</button>
           </div>
           <div class="control-group">
-            <button class="btn-physical" id="btn-pause">Pause</button>
-            <span class="control-label">Hold</span>
+            <button class="btn-physical" id="btn-pause" title="Pause">⏸</button>
           </div>
           <div class="control-group">
-            <button class="btn-physical" id="btn-stop">Eject</button>
-            <span class="control-label">Stop</span>
+            <button class="btn-physical" id="btn-stop" title="Eject">⏹</button>
           </div>
         </div>
 
@@ -793,24 +799,34 @@
             <button
               class="mode-btn active"
               onclick="setFilter('filter-vhs', this)"
+              title="VHS Mode"
             >
-              VHS
+              📼
             </button>
-            <button class="mode-btn" onclick="setFilter('filter-bw', this)">
-              B/W
+            <button
+              class="mode-btn"
+              onclick="setFilter('filter-bw', this)"
+              title="Black & White"
+            >
+              ⚫
             </button>
-            <button class="mode-btn" onclick="setFilter('filter-cyber', this)">
-              CYB
+            <button
+              class="mode-btn"
+              onclick="setFilter('filter-cyber', this)"
+              title="Cyber"
+            >
+              ⚡
             </button>
           </div>
           <div class="flex items-center gap-2">
-            <span class="control-label">TRACKING</span>
+            <span class="control-label">📡</span>
             <input
               type="range"
               min="0"
               max="10"
               value="0"
               id="tracking-control"
+              title="Tracking"
             />
           </div>
         </div>
@@ -1267,9 +1283,10 @@
               // 显示播放提示
               osdPlay.style.display = "block";
               osdPlay.innerHTML =
-                "READY ▶ <br><span class='text-lg opacity-70'>Click Play</span>";
-              btnPlay.classList.add("active");
-              isPoweredOn = true; // 标记为已开启，但不播放
+                "READY ▶ <br><span class='text-lg opacity-70'>▶</span>";
+              // 移动设备上不设置active状态，等待用户点击播放
+              // btnPlay.classList.add("active"); // 移除这行，避免误导
+              isPoweredOn = false; // 标记为未开启，等待用户点击播放
             },
             { once: true }
           );
@@ -1319,7 +1336,7 @@
               isPoweredOn = true;
               osdPlay.style.display = "block";
               osdPlay.innerHTML =
-                "PLAY &#9658; <br><span class='text-lg opacity-70'>SP</span>";
+                "▶ PLAY <br><span class='text-lg opacity-70'>SP</span>";
               btnPlay.classList.add("active");
               btnPause.classList.remove("active");
               startGlitchLoop();
@@ -1331,7 +1348,7 @@
               if (!isMobileDevice()) {
                 // 桌面设备如果播放失败，显示提示
                 osdPlay.innerHTML =
-                  "READY ▶ <br><span class='text-lg opacity-70'>Click Play</span>";
+                  "READY ▶ <br><span class='text-lg opacity-70'>▶</span>";
               }
             });
         } else {
@@ -1403,7 +1420,7 @@
                 btnPlay.classList.add("active");
                 btnPause.classList.remove("active");
                 osdPlay.innerHTML =
-                  "PLAY &#9658; <br><span class='text-lg opacity-70'>SP</span>";
+                  "▶ PLAY <br><span class='text-lg opacity-70'>SP</span>";
               })
               .catch((error) => {
                 console.log("播放失败:", error);
@@ -1417,7 +1434,7 @@
             btnPlay.classList.add("active");
             btnPause.classList.remove("active");
             osdPlay.innerHTML =
-              "PLAY &#9658; <br><span class='text-lg opacity-70'>SP</span>";
+              "▶ PLAY <br><span class='text-lg opacity-70'>SP</span>";
           }
         }
       });
@@ -1427,7 +1444,7 @@
         btnPlay.classList.remove("active");
         btnPause.classList.add("active");
         osdPlay.innerHTML =
-          "PAUSE || <br><span class='text-lg opacity-70'>SP</span>";
+          "⏸ PAUSE <br><span class='text-lg opacity-70'>SP</span>";
       });
 
       document.getElementById("btn-stop").addEventListener("click", eject);
