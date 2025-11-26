@@ -777,7 +777,7 @@
           </div>
 
           <!-- 视频元素 -->
-          <video id="video-player" loop playsinline></video>
+          <video id="video-player" loop playsinline preload="metadata"></video>
 
           <!-- 上传 UI -->
           <label class="upload-zone" id="upload-ui">
@@ -1380,7 +1380,27 @@
 
       function handleFile(file) {
         const url = URL.createObjectURL(file);
-        video.src = url;
+
+        // 先设置事件监听器，再设置 src（避免事件丢失）
+        let videoReadyHandled = false;
+
+        // 处理视频加载完成的函数
+        const handleVideoReady = () => {
+          if (videoReadyHandled) return;
+          videoReadyHandled = true;
+
+          connectVideoAudio();
+          // 应用基础做旧效果
+          setTimeout(() => {
+            applyVintageAudio();
+          }, 100);
+
+          // 显示播放提示
+          osdPlay.style.display = "block";
+          osdPlay.innerHTML = getOSDText("ready", false);
+          // 移动设备上不设置active状态，等待用户点击播放
+          isPoweredOn = false; // 标记为未开启，等待用户点击播放
+        };
 
         // 初始化音频上下文（在用户交互后）
         initAudioContext();
@@ -1396,32 +1416,49 @@
           screen.classList.add("crt-on");
           screen.classList.remove("crt-off");
 
-          // 处理视频加载完成的函数
-          const handleVideoReady = () => {
-            connectVideoAudio();
-            // 应用基础做旧效果
-            setTimeout(() => {
-              applyVintageAudio();
-            }, 100);
+          // 先添加事件监听器（在设置 src 之前）
+          video.addEventListener(
+            "loadedmetadata",
+            () => {
+              console.log("Video metadata loaded");
+              handleVideoReady();
+            },
+            { once: true }
+          );
+          video.addEventListener(
+            "loadeddata",
+            () => {
+              console.log("Video data loaded");
+              handleVideoReady();
+            },
+            { once: true }
+          );
+          video.addEventListener(
+            "canplay",
+            () => {
+              console.log("Video can play");
+              handleVideoReady();
+            },
+            { once: true }
+          );
 
-            // 显示播放提示
-            osdPlay.style.display = "block";
-            osdPlay.innerHTML = getOSDText("ready", false);
-            // 移动设备上不设置active状态，等待用户点击播放
-            isPoweredOn = false; // 标记为未开启，等待用户点击播放
+          // 然后设置 src（设置 src 会自动开始加载）
+          video.src = url;
+
+          // 检查视频是否已经加载（快速情况或缓存）
+          const checkVideoReady = () => {
+            if (video.readyState >= 1 && !videoReadyHandled) {
+              console.log("Video already ready, state:", video.readyState);
+              handleVideoReady();
+            }
           };
 
-          // 监听视频加载完成（使用多个事件确保捕获）
-          if (video.readyState >= 1) {
-            // 视频已经加载了元数据
-            handleVideoReady();
-          } else {
-            // 等待视频加载
-            video.addEventListener("loadedmetadata", handleVideoReady, {
-              once: true,
-            });
-            video.addEventListener("canplay", handleVideoReady, { once: true });
-          }
+          // 立即检查一次
+          checkVideoReady();
+
+          // 延迟检查（处理异步加载）
+          setTimeout(checkVideoReady, 200);
+          setTimeout(checkVideoReady, 500);
         } else {
           // 桌面设备可以尝试自动播放
           // 监听视频加载完成，连接音频
