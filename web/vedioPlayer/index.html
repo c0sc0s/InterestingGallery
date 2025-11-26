@@ -834,6 +834,25 @@
 
       let isPoweredOn = false;
       let glitchInterval;
+      let pendingVideoFile = null; // 用于移动设备延迟播放
+
+      // 检测是否为 iOS 设备
+      function isIOS() {
+        return (
+          /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+          (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+        );
+      }
+
+      // 检测是否为 Android 设备
+      function isAndroid() {
+        return /Android/.test(navigator.userAgent);
+      }
+
+      // 检测是否为移动设备（iOS 或 Android）
+      function isMobileDevice() {
+        return isIOS() || isAndroid();
+      }
 
       // --- 音频处理系统 (Audio Processing) ---
       let audioContext = null;
@@ -1225,40 +1244,103 @@
         // 初始化音频上下文（在用户交互后）
         initAudioContext();
 
-        // 监听视频加载完成，连接音频
-        video.addEventListener(
-          "loadedmetadata",
-          () => {
-            connectVideoAudio();
-            // 应用基础做旧效果
-            setTimeout(() => {
-              applyVintageAudio();
-            }, 100);
-          },
-          { once: true }
-        );
+        // 移动设备（iOS/Android）需要用户交互才能播放，所以延迟到用户点击播放按钮
+        if (isMobileDevice()) {
+          // 标记有待播放的视频
+          pendingVideoFile = true;
 
-        powerOn();
+          // 监听视频加载完成
+          video.addEventListener(
+            "loadedmetadata",
+            () => {
+              connectVideoAudio();
+              // 应用基础做旧效果
+              setTimeout(() => {
+                applyVintageAudio();
+              }, 100);
+
+              // 视频加载完成后，隐藏上传 UI，显示视频准备就绪状态
+              uploadUI.style.display = "none";
+              staticNoise.style.display = "none";
+              screen.classList.add("crt-on");
+              screen.classList.remove("crt-off");
+              // 显示播放提示
+              osdPlay.style.display = "block";
+              osdPlay.innerHTML =
+                "READY ▶ <br><span class='text-lg opacity-70'>Click Play</span>";
+              btnPlay.classList.add("active");
+              isPoweredOn = true; // 标记为已开启，但不播放
+            },
+            { once: true }
+          );
+        } else {
+          // 桌面设备可以尝试自动播放
+          // 监听视频加载完成，连接音频
+          video.addEventListener(
+            "loadedmetadata",
+            () => {
+              connectVideoAudio();
+              // 应用基础做旧效果
+              setTimeout(() => {
+                applyVintageAudio();
+              }, 100);
+            },
+            { once: true }
+          );
+
+          powerOn();
+        }
       }
 
       function powerOn() {
-        if (isPoweredOn) return;
-        uploadUI.style.display = "none";
-        staticNoise.style.display = "none";
-        screen.classList.add("crt-on");
-        screen.classList.remove("crt-off");
+        if (isPoweredOn && !pendingVideoFile) return;
+
+        // 如果是 iOS 待播放状态，先清除标记
+        if (pendingVideoFile) {
+          pendingVideoFile = false;
+        } else {
+          uploadUI.style.display = "none";
+          staticNoise.style.display = "none";
+          screen.classList.add("crt-on");
+          screen.classList.remove("crt-off");
+        }
 
         // 确保音频上下文已激活
         if (audioContext && audioContext.state === "suspended") {
           audioContext.resume();
         }
 
-        video.play();
-        isPoweredOn = true;
-        osdPlay.style.display = "block";
-        btnPlay.classList.add("active");
-
-        startGlitchLoop();
+        // 尝试播放，处理可能的错误
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              // 播放成功
+              isPoweredOn = true;
+              osdPlay.style.display = "block";
+              osdPlay.innerHTML =
+                "PLAY &#9658; <br><span class='text-lg opacity-70'>SP</span>";
+              btnPlay.classList.add("active");
+              btnPause.classList.remove("active");
+              startGlitchLoop();
+            })
+            .catch((error) => {
+              // 播放被阻止（通常是移动设备或浏览器策略）
+              console.log("自动播放被阻止，等待用户交互:", error);
+              // 保持当前状态，等待用户点击播放按钮
+              if (!isMobileDevice()) {
+                // 桌面设备如果播放失败，显示提示
+                osdPlay.innerHTML =
+                  "READY ▶ <br><span class='text-lg opacity-70'>Click Play</span>";
+              }
+            });
+        } else {
+          // 旧浏览器兼容
+          isPoweredOn = true;
+          osdPlay.style.display = "block";
+          btnPlay.classList.add("active");
+          startGlitchLoop();
+        }
       }
 
       function eject() {
@@ -1278,6 +1360,7 @@
         }
         hasAudio = false;
         currentGlitchType = null;
+        pendingVideoFile = false; // 清除待播放标记
 
         osdPlay.style.display = "none";
         btnPlay.classList.remove("active");
@@ -1304,12 +1387,38 @@
             audioContext.resume();
           }
 
-          video.play();
-          if (!isPoweredOn) powerOn();
-          btnPlay.classList.add("active");
-          btnPause.classList.remove("active");
-          osdPlay.innerHTML =
-            "PLAY &#9658; <br><span class='text-lg opacity-70'>SP</span>";
+          // 如果是 iOS 待播放状态，先完成 powerOn 流程
+          if (pendingVideoFile) {
+            powerOn();
+            return;
+          }
+
+          // 尝试播放
+          const playPromise = video.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                // 播放成功
+                if (!isPoweredOn) powerOn();
+                btnPlay.classList.add("active");
+                btnPause.classList.remove("active");
+                osdPlay.innerHTML =
+                  "PLAY &#9658; <br><span class='text-lg opacity-70'>SP</span>";
+              })
+              .catch((error) => {
+                console.log("播放失败:", error);
+                // 如果播放失败，尝试调用 powerOn
+                if (!isPoweredOn) powerOn();
+              });
+          } else {
+            // 旧浏览器兼容
+            video.play();
+            if (!isPoweredOn) powerOn();
+            btnPlay.classList.add("active");
+            btnPause.classList.remove("active");
+            osdPlay.innerHTML =
+              "PLAY &#9658; <br><span class='text-lg opacity-70'>SP</span>";
+          }
         }
       });
 
