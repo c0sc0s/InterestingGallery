@@ -1,487 +1,252 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>无用计算器 | The Useless Calculator</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@500;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            background-color: #121212;
-            font-family: 'JetBrains Mono', monospace;
-            touch-action: manipulation;
-            transition: background-color 0.5s ease, filter 0.3s ease;
-            overflow: hidden; /* 防止掉落动画撑大页面 */
-        }
-
-        /* 基础 UI */
-        .calc-btn {
-            transition: all 0.1s active, transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-            z-index: 10;
-            position: relative;
-        }
-        .calc-btn:active {
-            transform: scale(0.95);
-        }
-
-        .screen-glow {
-            text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
-        }
-
-        .answer-font {
-            font-family: 'Noto Serif SC', serif;
-            line-height: 1.3;
-        }
-        
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* --- 混沌特效 (Chaos Effects) --- */
-
-        /* 1. 剧烈震动 */
-        @keyframes violent-shake {
-            0% { transform: translate(1px, 1px) rotate(0deg); }
-            10% { transform: translate(-1px, -2px) rotate(-1deg); }
-            20% { transform: translate(-3px, 0px) rotate(1deg); }
-            30% { transform: translate(3px, 2px) rotate(0deg); }
-            40% { transform: translate(1px, -1px) rotate(1deg); }
-            50% { transform: translate(-1px, 2px) rotate(-1deg); }
-            60% { transform: translate(-3px, 1px) rotate(0deg); }
-            70% { transform: translate(3px, 1px) rotate(-1deg); }
-            80% { transform: translate(-1px, -1px) rotate(1deg); }
-            90% { transform: translate(1px, 2px) rotate(0deg); }
-            100% { transform: translate(1px, -2px) rotate(-1deg); }
-        }
-        .shake-hard {
-            animation: violent-shake 0.5s;
-            animation-iteration-count: infinite;
-        }
-
-        /* 2. 赛博故障 (Glitch) */
-        .glitch-text {
-            position: relative;
-            animation: glitch-skew 1s infinite linear alternate-reverse;
-        }
-        .glitch-text::before, .glitch-text::after {
-            content: attr(data-text);
-            position: absolute;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #000;
-        }
-        .glitch-text::before {
-            left: 2px;
-            text-shadow: -1px 0 #ff00c1;
-            clip: rect(44px, 450px, 56px, 0);
-            animation: glitch-anim 5s infinite linear alternate-reverse;
-        }
-        .glitch-text::after {
-            left: -2px;
-            text-shadow: -1px 0 #00fff9;
-            clip: rect(44px, 450px, 56px, 0);
-            animation: glitch-anim2 5s infinite linear alternate-reverse;
-        }
-        @keyframes glitch-anim {
-            0% { clip: rect(31px, 9999px, 94px, 0); transform: skew(0.85deg); }
-            20% { clip: rect(6px, 9999px, 3px, 0); transform: skew(0.05deg); }
-            40% { clip: rect(28px, 9999px, 26px, 0); transform: skew(0.15deg); }
-            60% { clip: rect(53px, 9999px, 42px, 0); transform: skew(0.55deg); }
-            80% { clip: rect(15px, 9999px, 80px, 0); transform: skew(0.25deg); }
-            100% { clip: rect(42px, 9999px, 18px, 0); transform: skew(0.65deg); }
-        }
-        @keyframes glitch-anim2 {
-            0% { clip: rect(65px, 9999px, 100px, 0); transform: skew(0.25deg); }
-            20% { clip: rect(32px, 9999px, 20px, 0); transform: skew(0.85deg); }
-            40% { clip: rect(10px, 9999px, 65px, 0); transform: skew(0.05deg); }
-            60% { clip: rect(80px, 9999px, 5px, 0); transform: skew(0.35deg); }
-            80% { clip: rect(20px, 9999px, 35px, 0); transform: skew(0.95deg); }
-            100% { clip: rect(5px, 9999px, 90px, 0); transform: skew(0.15deg); }
-        }
-
-        /* 3. 眩晕旋转 */
-        .dizzy {
-            transition: transform 2s ease;
-            transform: rotate(180deg) scale(0.8);
-        }
-
-        /* 4. 重力崩坏 (JS控制 transform) */
-        .fallen {
-            pointer-events: none; /* 掉落后不可点击 */
-        }
-        
-        /* 5. 模糊 */
-        .blurred {
-            filter: blur(4px);
-        }
-
-        /* 6. 迪斯科 */
-        @keyframes disco-bg {
-            0% { background-color: #121212; }
-            25% { background-color: #4a0404; }
-            50% { background-color: #042f4a; }
-            75% { background-color: #044a15; }
-            100% { background-color: #121212; }
-        }
-        .disco-mode {
-            animation: disco-bg 2s infinite;
-        }
-
-        /* 动画辅助 */
-        .fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
-</head>
-<body id="body" class="h-screen w-full flex items-center justify-center bg-neutral-900 selection:bg-orange-500 selection:text-white">
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body
+    id="body"
+    class="h-screen w-full flex items-center justify-center bg-neutral-900 selection:bg-orange-500 selection:text-white"
+  >
+    <!-- 粒子容器 -->
+    <div id="particle-container"></div>
 
     <!-- 计算器外壳 -->
-    <div id="calculator" class="w-full max-w-sm bg-black rounded-[2rem] p-5 shadow-2xl border border-neutral-800 relative transition-all duration-700 ease-in-out">
-        
-        <!-- 装饰性光泽 -->
-        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neutral-700 to-transparent opacity-50"></div>
+    <div
+      id="calculator"
+      class="w-full max-w-sm bg-black rounded-[2rem] p-5 shadow-2xl border border-neutral-800 relative transition-all duration-700 ease-in-out"
+    >
+      <!-- 装饰性光泽 -->
+      <div
+        class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neutral-700 to-transparent opacity-50"
+      ></div>
 
-        <!-- 显示屏区域 -->
-        <div class="h-48 mb-4 flex flex-col justify-end items-end p-2 text-right relative z-20">
-            <!-- 小字：运算过程 (伪装) -->
-            <div id="history" class="text-neutral-500 text-lg mb-1 h-6 w-full truncate transition-opacity duration-300"></div>
-            
-            <!-- 大字：主显示/答案 -->
-            <div id="display" data-text="0" class="text-white text-5xl font-light break-words w-full screen-glow transition-all duration-300 max-h-32 overflow-y-auto no-scrollbar flex items-end justify-end">
-                0
-            </div>
+      <!-- 显示屏区域 -->
+      <div
+        class="h-48 mb-4 flex flex-col justify-end items-end p-2 text-right relative z-20"
+      >
+        <!-- 小字：运算过程 (伪装) -->
+        <div
+          id="history"
+          class="text-neutral-500 text-lg mb-1 h-6 w-full truncate transition-opacity duration-300"
+        ></div>
+
+        <!-- 大字：主显示/答案 -->
+        <div
+          id="display"
+          data-text="0"
+          class="text-white text-5xl font-light break-words w-full screen-glow transition-all duration-300 max-h-32 overflow-y-auto no-scrollbar flex items-end justify-end"
+        >
+          0
         </div>
+      </div>
 
-        <!-- 键盘区域 -->
-        <div id="keypad" class="grid grid-cols-4 gap-3 relative z-10">
-            <!-- Row 1 -->
-            <button onclick="clearDisplay()" class="calc-btn h-16 w-16 rounded-full bg-neutral-400 text-black text-2xl font-bold hover:bg-neutral-300 flex items-center justify-center">AC</button>
-            <button onclick="appendSymbol('±')" class="calc-btn h-16 w-16 rounded-full bg-neutral-400 text-black text-2xl font-bold hover:bg-neutral-300 flex items-center justify-center">+/-</button>
-            <button onclick="appendSymbol('%')" class="calc-btn h-16 w-16 rounded-full bg-neutral-400 text-black text-2xl font-bold hover:bg-neutral-300 flex items-center justify-center">%</button>
-            <button onclick="appendOperator('÷')" class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-orange-400 flex items-center justify-center pb-1">÷</button>
+      <!-- 键盘区域 -->
+      <div id="keypad" class="grid grid-cols-4 gap-3 relative z-10">
+        <!-- Row 1 -->
+        <button
+          id="btn-ac"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-400 text-black text-2xl font-bold hover:bg-neutral-300 flex items-center justify-center"
+        >
+          AC
+        </button>
+        <button
+          id="btn-sign"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-400 text-black text-2xl font-bold hover:bg-neutral-300 flex items-center justify-center"
+        >
+          +/-
+        </button>
+        <button
+          id="btn-percent"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-400 text-black text-2xl font-bold hover:bg-neutral-300 flex items-center justify-center"
+        >
+          %
+        </button>
+        <button
+          id="btn-divide"
+          class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-orange-400 flex items-center justify-center pb-1"
+        >
+          ÷
+        </button>
 
-            <!-- Row 2 -->
-            <button onclick="appendNumber('7')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">7</button>
-            <button onclick="appendNumber('8')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">8</button>
-            <button onclick="appendNumber('9')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">9</button>
-            <button onclick="appendOperator('×')" class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-orange-400 flex items-center justify-center pb-1">×</button>
+        <!-- Row 2 -->
+        <button
+          id="btn-7"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          7
+        </button>
+        <button
+          id="btn-8"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          8
+        </button>
+        <button
+          id="btn-9"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          9
+        </button>
+        <button
+          id="btn-multiply"
+          class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-orange-400 flex items-center justify-center pb-1"
+        >
+          ×
+        </button>
 
-            <!-- Row 3 -->
-            <button onclick="appendNumber('4')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">4</button>
-            <button onclick="appendNumber('5')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">5</button>
-            <button onclick="appendNumber('6')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">6</button>
-            <button onclick="appendOperator('-')" class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-orange-400 flex items-center justify-center pb-1">-</button>
+        <!-- Row 3 -->
+        <button
+          id="btn-4"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          4
+        </button>
+        <button
+          id="btn-5"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          5
+        </button>
+        <button
+          id="btn-6"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          6
+        </button>
+        <button
+          id="btn-subtract"
+          class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-orange-400 flex items-center justify-center pb-1"
+        >
+          -
+        </button>
 
-            <!-- Row 4 -->
-            <button onclick="appendNumber('1')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">1</button>
-            <button onclick="appendNumber('2')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">2</button>
-            <button onclick="appendNumber('3')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">3</button>
-            <button onclick="appendOperator('+')" class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-orange-400 flex items-center justify-center pb-1">+</button>
+        <!-- Row 4 -->
+        <button
+          id="btn-1"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          1
+        </button>
+        <button
+          id="btn-2"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          2
+        </button>
+        <button
+          id="btn-3"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          3
+        </button>
+        <button
+          id="btn-add"
+          class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-orange-400 flex items-center justify-center pb-1"
+        >
+          +
+        </button>
 
-            <!-- Row 5 -->
-            <button onclick="appendNumber('0')" class="calc-btn h-16 w-[10.5rem] rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 pl-7 flex items-center justify-start col-span-2">0</button>
-            <button onclick="appendNumber('.')" class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center">.</button>
-            <button onclick="calculateUselessly()" id="equal-btn" class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-white hover:text-orange-500 transition-colors duration-300 flex items-center justify-center pb-1">=</button>
-        </div>
-        
-        <!-- 底部标语 -->
-        <div class="text-center mt-6 text-neutral-700 text-xs tracking-widest uppercase opacity-40">
-            Instrumental Rationality is Dead
-        </div>
+        <!-- Row 5 -->
+        <button
+          id="btn-0"
+          class="calc-btn h-16 w-[10.5rem] rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 pl-7 flex items-center justify-start col-span-2"
+        >
+          0
+        </button>
+        <button
+          id="btn-dot"
+          class="calc-btn h-16 w-16 rounded-full bg-neutral-800 text-white text-3xl hover:bg-neutral-700 flex items-center justify-center"
+        >
+          .
+        </button>
+        <button
+          id="btn-equal"
+          class="calc-btn h-16 w-16 rounded-full bg-orange-500 text-white text-3xl font-bold hover:bg-white hover:text-orange-500 transition-colors duration-300 flex items-center justify-center pb-1"
+        >
+          =
+        </button>
+      </div>
+
+      <!-- 底部标语 -->
+      <div
+        class="text-center mt-6 text-neutral-700 text-xs tracking-widest uppercase opacity-40"
+      >
+        Instrumental Rationality is Dead
+      </div>
     </div>
 
-    <script>
-        const display = document.getElementById('display');
-        const history = document.getElementById('history');
-        const calculator = document.getElementById('calculator');
-        const body = document.getElementById('body');
-        const buttons = document.querySelectorAll('.calc-btn');
+    <script type="module">
+      import { Calculator } from "./modules/calculator.js";
+      import { initAudio } from "./modules/audio.js";
+      import { initRunawayButton } from "./modules/effects.js";
 
-        let currentInput = '0';
-        let previousInput = '';
-        let operator = null;
-        let isShowingAnswer = false;
-        let activeEffects = [];
+      // 初始化音频系统
+      initAudio();
 
-        // -------------------------------------------------------
-        // 1. 扩充词汇库 (The Vocabulary of Chaos)
-        // -------------------------------------------------------
-        const vocab = {
-            nouns: [
-                "土豆", "宇宙", "悲伤", "星期三", "数学", "沉默", "猫", "雨滴", "灵魂", "算法", 
-                "晚霞", "虚无", "意义", "404错误", "长颈鹿", "微风", "回声", "梦想", "海浪", "答案", 
-                "塑料袋", "月亮", "哲学", "量子", "番茄", "孤独", "时间", "碎片", "谎言", "真理",
-                "便利店", "沙发", "云朵", "冰淇淋", "重力", "诗歌", "回车键", "黑胶唱片", "仙人掌",
-                "旧电池", "恐龙化石", "气泡水", "打字机", "霓虹灯", "便利贴", "深渊", "黑洞", "bug"
-            ],
-            adjectives: [
-                "忧郁的", "透明的", "愤怒的", "寂静的", "永恒的", "破碎的", "甜蜜的", "荒谬的", 
-                "蓝色的", "无用的", "疲惫的", "巨大的", "微小的", "失重的", "迷茫的", "柔软的", 
-                "生锈的", "遥远的", "被遗忘的", "危险的", "温柔的", "不可计算的", "像素化的", 
-                "勉强的", "粘稠的", "发光的", "不存在的", "二手的", "过期的", "神圣的", "亵渎的"
-            ],
-            verbs: [
-                "沉思", "爆炸", "哭泣", "飞翔", "拒绝", "拥抱", "遗忘", "融化", "尖叫", "沉睡", 
-                "漫步", "凝视", "蒸发", "坠落", "打哈欠", "跳舞", "分解", "静止", "旋转", "叹气",
-                "自我复制", "格式化", "重启", "越狱", "冬眠", "发霉"
-            ],
-            locations: [
-                "在风中", "在深海", "在梦里", "在超市货架上", "在黑洞边缘", "在你的左口袋里", 
-                "在昨天下午", "在数据流中", "在火星上", "在咖啡杯底", "在云端", "在屏幕背后",
-                "在平行宇宙", "在垃圾桶里", "在旧时光里"
-            ],
-            prefixes: [
-                "也许是", "不如说是", "大概是", "仅仅是", "仿佛", "甚至", "如果你仔细听，是", 
-                "结果显示为", "Error:", "System:", "警告：", "检测到：", "建议："
-            ],
-            minimalist: [
-                "哦。", "嗯。", "...", "行吧。", "（沉默）", "已阅。", "啊？", "没意思。", 
-                "就这样吧。", "（叹气）", "阅。", "（某种不可名状的声音）", "无。", "啧。", "呵。",
-                "Null", "NaN"
-            ],
-            kaomoji: [
-                "(╯°□°）╯︵ ┻━┻", "( ˘ ³˘)♥", "¯\\_(ツ)_/¯", "(;´༎ຶД༎ຶ`)", "( ¬_¬)",
-                "ʕ•ᴥ•ʔ", "(ง'̀-'́)ง", "( ✖ _ ✖ )", "┌( ಠ_ಠ)┘", "(uwu)", "(*_*)",
-                "ಠ_ಠ", "(｡•́︿•̀｡)"
-            ],
-            code: [
-                "while(alive) { suffer(); }",
-                "if (sad) { eat_ice_cream(); }",
-                "sudo rm -rf /life",
-                "return undefined;",
-                "throw new Error('Reality crashed')",
-                "console.log('Help');",
-                "418 I'm a teapot",
-                "git push origin hope --force"
-            ],
-            hugeEmoji: [
-                "🥔", "🌌", "🐈", "🗿", "👽", "🤡", "👾", "👻", "🌪️", "💊", "🧠", "👁️", "🕳️", "🧬", "🦠"
-            ]
-        };
+      // 获取DOM元素
+      const display = document.getElementById("display");
+      const history = document.getElementById("history");
+      const calculator = document.getElementById("calculator");
+      const body = document.getElementById("body");
+      const buttons = document.querySelectorAll(".calc-btn");
 
-        // 将原本的 const r 修改为 randomChoice，避免重复声明报错
-        const randomChoice = (arr) => arr[Math.floor(Math.random() * arr.length)];
+      // 创建计算器实例
+      const calc = new Calculator(display, history, calculator, body, buttons);
 
-        // -------------------------------------------------------
-        // 2. 生成逻辑扩充 (The Templates)
-        // -------------------------------------------------------
-        const templates = [
-            // 基础组合
-            () => `${randomChoice(vocab.adjectives)}${randomChoice(vocab.nouns)}`,
-            () => `${randomChoice(vocab.nouns)}${randomChoice(vocab.locations)}${randomChoice(vocab.verbs)}`,
-            () => `${randomChoice(vocab.prefixes)} ${randomChoice(vocab.adjectives)}${randomChoice(vocab.nouns)}`,
-            () => `关于${randomChoice(vocab.nouns)}的${randomChoice(vocab.adjectives)}结论`,
-            () => `比${randomChoice(vocab.nouns)}更${randomChoice(vocab.adjectives)}`,
-            () => `${Math.floor(Math.random() * 100)}个${randomChoice(vocab.adjectives)}${randomChoice(vocab.nouns)}`,
-            () => `${randomChoice(vocab.nouns)}${randomChoice(vocab.verbs)}了${randomChoice(vocab.nouns)}`,
-            () => `${randomChoice(vocab.nouns)}`,
-            () => `${randomChoice(vocab.nouns)}重要吗？`,
-            
-            // 特殊类别 (权重增加)
-            () => randomChoice(vocab.minimalist),
-            () => randomChoice(vocab.minimalist),
-            () => randomChoice(vocab.kaomoji),
-            () => randomChoice(vocab.code),
-            
-            // 巨大 Emoji 模式 (返回特殊标记，后面处理)
-            () => ({ type: 'emoji', content: randomChoice(vocab.hugeEmoji) })
-        ];
+      // 初始化逃跑的等于号
+      const equalBtn = document.getElementById("btn-equal");
+      if (equalBtn) {
+        initRunawayButton(equalBtn);
+      }
 
-        // -------------------------------------------------------
-        // 3. 混沌视觉特效引擎 (The Chaos Engine)
-        // -------------------------------------------------------
-        const specialEffects = {
-            glitch: () => {
-                display.classList.add('glitch-text');
-            },
-            invert: () => {
-                body.style.filter = 'invert(1)';
-                body.style.backgroundColor = '#ddd'; // 配合反色
-            },
-            shake: () => {
-                calculator.classList.add('shake-hard');
-            },
-            dizzy: () => {
-                calculator.classList.add('dizzy');
-            },
-            gravity: () => {
-                // 让按钮掉落
-                buttons.forEach(btn => {
-                    if (btn.id === 'equal-btn') return; // 等号坚挺
-                    const randomRotation = Math.random() * 360;
-                    const randomY = 200 + Math.random() * 500;
-                    const randomX = (Math.random() - 0.5) * 100;
-                    
-                    btn.style.transition = `transform ${0.5 + Math.random()}s cubic-bezier(0.5, 0, 0.5, 1)`;
-                    btn.style.transform = `translate(${randomX}px, ${randomY}px) rotate(${randomRotation}deg)`;
-                    btn.classList.add('fallen');
-                });
-            },
-            disco: () => {
-                body.classList.add('disco-mode');
-            },
-            blur: () => {
-                calculator.classList.add('blurred');
-            }
-        };
+      // 绑定按钮事件
+      document
+        .getElementById("btn-ac")
+        .addEventListener("click", () => calc.clearDisplay());
+      document
+        .getElementById("btn-sign")
+        .addEventListener("click", () => calc.appendSymbol("±"));
+      document
+        .getElementById("btn-percent")
+        .addEventListener("click", () => calc.appendSymbol("%"));
+      document
+        .getElementById("btn-divide")
+        .addEventListener("click", () => calc.appendOperator("÷"));
+      document
+        .getElementById("btn-multiply")
+        .addEventListener("click", () => calc.appendOperator("×"));
+      document
+        .getElementById("btn-subtract")
+        .addEventListener("click", () => calc.appendOperator("-"));
+      document
+        .getElementById("btn-add")
+        .addEventListener("click", () => calc.appendOperator("+"));
+      document
+        .getElementById("btn-equal")
+        .addEventListener("click", () => calc.calculateUselessly());
 
-        function triggerRandomEffect() {
-            // 清除旧效果
-            resetEffects();
-
-            // 30% 概率触发特效，如果是 AC 则不触发
-            if (Math.random() > 0.35) return;
-
-            const effects = Object.keys(specialEffects);
-            const selectedEffect = randomChoice(effects);
-            
-            console.log("Triggering effect:", selectedEffect);
-            specialEffects[selectedEffect]();
-            activeEffects.push(selectedEffect);
+      // 数字按钮
+      for (let i = 0; i <= 9; i++) {
+        const btn = document.getElementById(`btn-${i}`);
+        if (btn) {
+          btn.addEventListener("click", () => calc.appendNumber(i.toString()));
         }
+      }
 
-        function resetEffects() {
-            // 移除类名
-            display.classList.remove('glitch-text');
-            calculator.classList.remove('shake-hard', 'dizzy', 'blurred');
-            body.style.filter = '';
-            body.style.backgroundColor = '#121212';
-            body.classList.remove('disco-mode');
-            
-            // 重置掉落的按钮
-            buttons.forEach(btn => {
-                btn.style.transform = '';
-                btn.classList.remove('fallen');
-            });
-            
-            activeEffects = [];
-        }
+      document
+        .getElementById("btn-dot")
+        .addEventListener("click", () => calc.appendNumber("."));
 
-
-        // -------------------------------------------------------
-        // 交互逻辑
-        // -------------------------------------------------------
-        function getRandomAnswer() {
-            const template = randomChoice(templates);
-            return template();
-        }
-
-        function updateDisplay() {
-            if (isShowingAnswer) return;
-            let displayValue = currentInput;
-            if (displayValue.length > 9) {
-                display.style.fontSize = '2rem';
-            } else {
-                display.style.fontSize = '3rem';
-            }
-            display.innerText = displayValue;
-            display.setAttribute('data-text', displayValue); // For glitch effect
-            
-            display.classList.remove('answer-font', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 'text-6xl', 'text-8xl', 'italic', 'text-orange-400');
-            display.classList.add('text-5xl', 'font-light');
-            history.style.opacity = '1';
-        }
-
-        function appendNumber(number) {
-            if (isShowingAnswer) clearDisplay();
-            if (currentInput === '0' && number !== '.') {
-                currentInput = number;
-            } else {
-                if (number === '.' && currentInput.includes('.')) return;
-                currentInput += number;
-            }
-            updateDisplay();
-        }
-
-        function appendOperator(op) {
-            if (isShowingAnswer) {
-                isShowingAnswer = false;
-                currentInput = '0';
-                resetEffects(); // 新运算重置效果
-            }
-            if (currentInput === '') return;
-            operator = op;
-            previousInput = currentInput;
-            currentInput = '0';
-            history.innerText = `${previousInput} ${operator}`;
-            updateDisplay();
-        }
-        
-        function appendSymbol(type) {
-            if(isShowingAnswer) clearDisplay();
-            if(type === '%') currentInput = (parseFloat(currentInput) / 100).toString();
-            else if (type === '±') currentInput = (parseFloat(currentInput) * -1).toString();
-            updateDisplay();
-        }
-
-        function clearDisplay() {
-            currentInput = '0';
-            previousInput = '';
-            operator = null;
-            history.innerText = '';
-            isShowingAnswer = false;
-            
-            // 强制完全重置
-            resetEffects();
-            display.style.fontSize = '3rem';
-            display.classList.remove('answer-font', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 'text-6xl', 'text-8xl', 'italic', 'text-orange-400', 'fade-in-up');
-            display.classList.add('text-5xl', 'font-light');
-            updateDisplay();
-        }
-
-        function calculateUselessly() {
-            if (!operator && !previousInput && currentInput === '0') return;
-            
-            const result = getRandomAnswer();
-            isShowingAnswer = true;
-            
-            if (operator) history.innerText = `${previousInput} ${operator} ${currentInput} =`;
-            else history.innerText = `${currentInput} =`;
-
-            display.classList.remove('text-5xl', 'font-light');
-            display.style.fontSize = '';
-
-            let finalText = "";
-            
-            // 处理特殊对象类型 (如巨大 Emoji)
-            if (typeof result === 'object' && result.type === 'emoji') {
-                finalText = result.content;
-                display.classList.add('text-8xl'); // 巨大
-            } else {
-                finalText = result;
-                // 字号自适应
-                if (finalText.length > 25) display.classList.add('text-lg');
-                else if (finalText.length > 15) display.classList.add('text-xl');
-                else if (finalText.length > 8) display.classList.add('text-2xl');
-                else display.classList.add('text-3xl');
-            }
-
-            // 针对代码风格的特殊处理
-            if (vocab.code.includes(finalText)) {
-                 display.style.fontFamily = "'JetBrains Mono', monospace"; // 代码用等宽
-            } else {
-                 display.classList.add('answer-font');
-            }
-
-            display.classList.add('italic', 'text-orange-400', 'fade-in-up');
-            display.innerText = finalText;
-            display.setAttribute('data-text', finalText);
-
-            // 触发混沌特效
-            triggerRandomEffect();
-        }
-        
-        document.addEventListener('keydown', (event) => {
-            const key = event.key;
-            if (/[0-9]/.test(key)) appendNumber(key);
-            if (key === '.') appendNumber('.');
-            if (key === '+' || key === '-') appendOperator(key);
-            if (key === '*') appendOperator('×');
-            if (key === '/') appendOperator('÷');
-            if (key === 'Enter' || key === '=') calculateUselessly();
-            if (key === 'Backspace' || key === 'Escape') clearDisplay();
-        });
+      // 将计算器实例暴露到全局，方便调试
+      window.calc = calc;
     </script>
-</body>
+  </body>
 </html>
