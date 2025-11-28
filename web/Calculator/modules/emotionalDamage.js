@@ -157,3 +157,5 @@ export function resetStrike() {
     clickCount = 0;
 }
 
+
+

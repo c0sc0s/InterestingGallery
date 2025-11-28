@@ -40,3 +40,5 @@ export function getRandomAnswer() {
     return template();
 }
 
+
+

@@ -42,14 +42,6 @@ export class Calculator {
      * 初始化计算器
      */
     init() {
-        // 为所有按钮添加音效和疼痛检测
-        this.buttons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                playButtonSound();
-                checkButtonPain(this.body, this.display);
-            });
-        });
-        
         // 键盘事件监听
         document.addEventListener('keydown', (event) => {
             this.handleKeydown(event);
@@ -62,6 +54,14 @@ export class Calculator {
         setInterval(() => {
             createAnt(this.body);
         }, 60000);
+    }
+    
+    /**
+     * 处理按钮点击（统一处理音效和疼痛检测）
+     */
+    handleButtonClick() {
+        playButtonSound();
+        checkButtonPain(this.body, this.display);
     }
     
     /**
@@ -101,7 +101,10 @@ export class Calculator {
      * 添加数字
      */
     appendNumber(number) {
-        // 检查数字订阅限制
+        // 先处理按钮点击（即使被阻止也要有反馈）
+        this.handleButtonClick();
+        
+        // 检查数字订阅限制（只对数字检查，不包括小数点）
         if (number !== '.' && checkNumberSubscription(number, this.body)) {
             return; // 被付费墙阻止
         }
@@ -126,6 +129,8 @@ export class Calculator {
      * 添加运算符
      */
     appendOperator(op) {
+        this.handleButtonClick();
+        
         if (this.isShowingAnswer) {
             this.isShowingAnswer = false;
             this.currentInput = '0';
@@ -164,6 +169,8 @@ export class Calculator {
      * 添加符号（% 或 +/-）
      */
     appendSymbol(type) {
+        this.handleButtonClick();
+        
         if (this.isShowingAnswer) this.clearDisplay();
         if (this.isTyping) {
             clearTimeout(this.typingTimeout);
@@ -181,6 +188,8 @@ export class Calculator {
      * 清空显示
      */
     clearDisplay() {
+        this.handleButtonClick();
+        
         this.currentInput = '0';
         this.previousInput = '';
         this.operator = null;
@@ -244,6 +253,8 @@ export class Calculator {
      * 计算（生成随机答案）
      */
     calculateUselessly() {
+        this.handleButtonClick();
+        
         if (!this.operator && !this.previousInput && this.currentInput === '0') return;
         
         // 检查罢工状态

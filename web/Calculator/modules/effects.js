@@ -251,7 +251,10 @@ export function resetEffects(display, calculator, body, buttons) {
     // 重置掉落的按钮和错乱的按钮
     buttons.forEach(btn => {
         btn.style.transform = '';
+        btn.style.transition = '';
         btn.classList.remove('fallen', 'scrambled');
+        btn.style.pointerEvents = ''; // 确保可以点击
+        btn.disabled = false; // 确保按钮可用
     });
 }
 

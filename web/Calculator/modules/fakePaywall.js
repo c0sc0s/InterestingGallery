@@ -3,7 +3,7 @@
  * 模拟现代App的内购环节
  */
 
-let usedNumbers = new Set();
+let usedNumbers = new Map(); // 改为Map，记录每个数字的使用次数
 let isVIP = false;
 
 /**
@@ -15,14 +15,18 @@ let isVIP = false;
 export function checkNumberSubscription(number, body) {
     if (isVIP) return false;
     
-    // 每个数字每天只能用3次（简化：每次会话）
-    if (usedNumbers.has(number) && usedNumbers.size >= 3) {
+    // 每个数字只能用3次
+    const count = usedNumbers.get(number) || 0;
+    
+    // 如果已经达到限制，显示付费墙
+    if (count >= 3) {
         showPaywall(number, body);
-        return true;
+        return true; // 阻止输入
     }
     
-    usedNumbers.add(number);
-    return false;
+    // 增加使用次数（在允许的情况下）
+    usedNumbers.set(number, count + 1);
+    return false; // 允许输入
 }
 
 /**
@@ -57,7 +61,7 @@ function showPaywall(number, body) {
         modal.remove();
         // 模拟观看广告
         setTimeout(() => {
-            usedNumbers.delete(num);
+            usedNumbers.set(num, 0); // 重置该数字的使用次数
             alert('广告播放完成！数字 ' + num + ' 已解锁。');
         }, 100);
     };
