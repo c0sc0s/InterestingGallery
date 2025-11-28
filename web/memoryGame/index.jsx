@@ -86,15 +86,15 @@ const CartoonButton = ({ children, onClick, className = "", variant = "primary" 
 // 卡通卡片
 const Card = ({ content, rotation, onClick, className = "", size = "text-5xl", isHidden = false, status = 'normal' }) => {
   let baseStyle = "bg-white border-slate-900 text-slate-800";
-  let interactiveStyle = "hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-y-0 active:shadow-none";
+  let interactiveStyle = "hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] active:translate-y-0 active:shadow-none focus:outline-none";
   
   if (status === 'correct') {
     baseStyle = "bg-emerald-100 border-emerald-900 text-emerald-800";
-    interactiveStyle = "translate-y-0 shadow-none ring-4 ring-emerald-400"; 
+    interactiveStyle = "translate-y-0 shadow-none ring-4 ring-emerald-400 focus:outline-none"; 
   } 
   else if (status === 'disabled') {
     baseStyle = "bg-slate-100 border-slate-300 text-slate-300 opacity-60";
-    interactiveStyle = "cursor-not-allowed";
+    interactiveStyle = "cursor-not-allowed focus:outline-none";
   }
 
   if (isHidden) {
@@ -118,6 +118,10 @@ const Card = ({ content, rotation, onClick, className = "", size = "text-5xl", i
   return (
     <button
       onClick={handleCardClick}
+      onMouseLeave={(e) => {
+        // 强制清除可能的 hover 状态
+        e.currentTarget.blur();
+      }}
       disabled={status !== 'normal'}
       className={`
         relative rounded-xl border-4 flex items-center justify-center aspect-square 
@@ -294,6 +298,10 @@ export default function NBackGame() {
   };
 
   const handleNextRound = (currentScore) => {
+    // 确保清除所有反馈状态
+    setFeedback(null);
+    setRating(null);
+    
     const oldCurrent = currentCard;
     setPreviousCard(oldCurrent);
     const newCurrent = generateCard();
@@ -481,7 +489,7 @@ export default function NBackGame() {
 
                   return (
                     <Card 
-                      key={`${opt.id}-${idx}`}
+                      key={`${opt.id}-${idx}-${roundStartTime}`}
                       content={opt.content}
                       rotation={opt.rotation}
                       status={displayStatus}
