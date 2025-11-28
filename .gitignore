@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json  # 取消注释以支持 npm cache
 yarn.lock
-pnpm-lock.yaml
+# pnpm-lock.yaml  # 如果使用 pnpm，取消注释
 
 # Build output
 dist/
