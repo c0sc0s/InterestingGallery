@@ -4,8 +4,6 @@ import {
   Download,
   Grid3X3,
   Pipette,
-  Layers,
-  Code,
   Image as ImageIcon,
   Zap,
   RefreshCw,
@@ -25,11 +23,7 @@ import {
   Clock,
   FileImage,
   FileJson,
-  CheckCircle2,
   X,
-  ChevronRight,
-  Settings2,
-  EyeOff,
 } from "lucide-react";
 
 const workerScript = `
@@ -159,40 +153,19 @@ const App = () => {
   const [isSelectingROI, setIsSelectingROI] = useState(false);
   const [protectionZones, setProtectionZones] = useState([]);
   const [currentDragZone, setCurrentDragZone] = useState(null);
-  const [dragStart, setDragStart] = useState(null);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
   const canvasRef = useRef(null);
   const viewportRef = useRef(null);
   const workerRef = useRef(null);
   const startTimeRef = useRef(0);
   const fileInputRef = useRef(null);
+  const lastMousePosRef = useRef({ x: 0, y: 0 });
 
   const [pixelDataPoints, setPixelData] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
-
-  const renderGridOnCanvas = useCallback(
-    (ctx) => {
-      if (originalSize.width <= 0) return;
-      ctx.strokeStyle =
-        theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)";
-      ctx.lineWidth = 1 / (scale || 1);
-      ctx.beginPath();
-      for (let x = 0; x <= originalSize.width; x += pixelSize) {
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, originalSize.height);
-      }
-      for (let y = 0; y <= originalSize.height; y += pixelSize) {
-        ctx.moveTo(0, y);
-        ctx.lineTo(originalSize.width, y);
-      }
-      ctx.stroke();
-    },
-    [originalSize, theme, scale, pixelSize],
-  );
 
   useEffect(() => {
     const blob = new Blob([workerScript], { type: "text/javascript" });
@@ -210,14 +183,13 @@ const App = () => {
         );
         ctx.clearRect(0, 0, originalSize.width, originalSize.height);
         ctx.putImageData(imgData, 0, 0);
-        if (showGrid) renderGridOnCanvas(ctx);
       }
       setIsProcessing(false);
       setComputeTime(performance.now() - startTimeRef.current);
     };
     workerRef.current = worker;
     return () => worker.terminate();
-  }, [originalSize, showGrid, renderGridOnCanvas]);
+  }, [originalSize]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -262,6 +234,21 @@ const App = () => {
     saturation,
   ]);
 
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || !image) return;
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const zoomSpeed = 0.0015;
+      setScale((prev) => {
+        const next = prev * (1 - e.deltaY * zoomSpeed);
+        return Math.min(Math.max(next, 0.01), 100);
+      });
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [image]);
+
   const fitToScreen = useCallback((w, h) => {
     if (!w || !h || !viewportRef.current) return;
     const vW = viewportRef.current.clientWidth;
@@ -295,93 +282,83 @@ const App = () => {
     return { x, y };
   };
 
-  const handleGlobalMouseDown = (e) => {
+  const handlePointerDown = (e) => {
     if (!image) return;
 
-    if (isDropperActive || isSelectingROI) {
+    if (isDropperActive) {
       const { x, y } = getCanvasCoords(e.clientX, e.clientY);
-      if (isDropperActive) {
-        const ctx = canvasRef.current.getContext("2d", {
-          willReadFrequently: true,
-        });
-        const p = ctx.getImageData(x, y, 1, 1).data;
-        setBgColor({ r: p[0], g: p[1], b: p[2] });
-        setIsFilterActive(true);
-        setIsDropperActive(false);
-      } else {
-        const lx = x / (pixelSize || 1);
-        const ly = y / (pixelSize || 1);
-        setDragStart({ x: lx, y: ly });
-        setCurrentDragZone({
-          id: Date.now(),
-          x1: lx,
-          y1: ly,
-          x2: lx,
-          y2: ly,
-        });
-      }
+      const ctx = canvasRef.current.getContext("2d", {
+        willReadFrequently: true,
+      });
+      const p = ctx.getImageData(x, y, 1, 1).data;
+      setBgColor({ r: p[0], g: p[1], b: p[2] });
+      setIsFilterActive(true);
+      setIsDropperActive(false);
+      return;
+    }
+
+    if (isSelectingROI) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      const lx = x / (pixelSize || 1);
+      const ly = y / (pixelSize || 1);
+      setCurrentDragZone({
+        id: Date.now(),
+        x1: lx,
+        y1: ly,
+        x2: lx,
+        y2: ly,
+      });
       return;
     }
 
     if (e.button === 0) {
+      e.currentTarget.setPointerCapture(e.pointerId);
       setIsDragging(true);
-      setLastMousePos({ x: e.clientX, y: e.clientY });
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     }
   };
 
-  const handleGlobalMouseMove = (e) => {
-    if (isSelectingROI && dragStart) {
+  const handlePointerMove = (e) => {
+    if (currentDragZone) {
       const { x, y } = getCanvasCoords(e.clientX, e.clientY);
       const lx = x / (pixelSize || 1);
       const ly = y / (pixelSize || 1);
       setCurrentDragZone((prev) =>
         prev ? { ...prev, x2: lx, y2: ly } : null,
       );
-    } else if (isDragging && image) {
-      const dx = e.clientX - lastMousePos.x;
-      const dy = e.clientY - lastMousePos.y;
+    } else if (isDragging) {
+      const dx = e.clientX - lastMousePosRef.current.x;
+      const dy = e.clientY - lastMousePosRef.current.y;
       setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
-      setLastMousePos({ x: e.clientX, y: e.clientY });
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     }
   };
 
-  const handleGlobalMouseUp = () => {
+  const handlePointerUp = () => {
     setIsDragging(false);
-    if (isSelectingROI && currentDragZone) {
+    if (currentDragZone) {
       setProtectionZones((p) => [...p, currentDragZone]);
       setCurrentDragZone(null);
       setIsSelectingROI(false);
     }
   };
 
-  const onWheel = (e) => {
-    if (!image) return;
-    e.preventDefault();
-    const zoomSpeed = 0.0015;
-    setScale((prev) => {
-      const next = prev * (1 - e.deltaY * zoomSpeed);
-      return Math.min(Math.max(next, 0.01), 100);
-    });
-  };
-
   const downloadPNG = () => {
     if (!canvasRef.current) return;
-    const wasGrid = showGrid;
-    if (wasGrid) setShowGrid(false);
-
-    setTimeout(() => {
-      const exportCanvas = document.createElement("canvas");
-      exportCanvas.width = originalSize.width;
-      exportCanvas.height = originalSize.height;
-      const ctx = exportCanvas.getContext("2d");
-      ctx.drawImage(canvasRef.current, 0, 0);
-      const a = document.createElement("a");
-      a.download = "picsoul_export.png";
-      a.href = exportCanvas.toDataURL("image/png");
-      a.click();
-      if (wasGrid) setShowGrid(true);
-    }, 100);
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = originalSize.width;
+    exportCanvas.height = originalSize.height;
+    const ctx = exportCanvas.getContext("2d");
+    ctx.drawImage(canvasRef.current, 0, 0);
+    const a = document.createElement("a");
+    a.download = "picsoul_export.png";
+    a.href = exportCanvas.toDataURL("image/png");
+    a.click();
   };
+
+  const gridColor =
+    theme === "dark" ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.15)";
 
   return (
     <div
@@ -704,12 +681,10 @@ const App = () => {
 
         <div
           ref={viewportRef}
-          className="flex-1 relative overflow-hidden flex items-center justify-center bg-[#f0f0f2] dark:bg-[#0c0c0e] transition-colors group/viewport"
-          onMouseDown={handleGlobalMouseDown}
-          onMouseMove={handleGlobalMouseMove}
-          onMouseUp={handleGlobalMouseUp}
-          onMouseLeave={handleGlobalMouseUp}
-          onWheel={onWheel}
+          className="flex-1 relative overflow-hidden flex items-center justify-center bg-[#f0f0f2] dark:bg-[#0c0c0e] transition-colors group/viewport touch-none"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
         >
           <div
             className={`absolute inset-0 transition-opacity pointer-events-none ${theme === "dark" ? "opacity-[0.05]" : "opacity-[0.03]"}`}
@@ -752,6 +727,16 @@ const App = () => {
                   height={originalSize.height || 1}
                   className={`block transition-opacity duration-300 ${isProcessing ? "opacity-40" : "opacity-100"} ${isDropperActive || isSelectingROI ? "cursor-crosshair" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}
                 />
+
+                {showGrid && (
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      backgroundImage: `linear-gradient(to right, ${gridColor} 1px, transparent 1px), linear-gradient(to bottom, ${gridColor} 1px, transparent 1px)`,
+                      backgroundSize: `${pixelSize}px ${pixelSize}px`,
+                    }}
+                  />
+                )}
 
                 {currentDragZone && (
                   <div
@@ -800,7 +785,7 @@ const App = () => {
           )}
 
           {image && (
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-zinc-200 dark:border-zinc-800 shadow-lg text-[9px] font-bold text-zinc-500 opacity-0 group-viewport/hover:opacity-100 transition-opacity">
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-zinc-200 dark:border-zinc-800 shadow-lg text-[9px] font-bold text-zinc-500 opacity-0 group-hover/viewport:opacity-100 transition-opacity">
               <Hand size={12} /> 按住并拖拽可平移视图{" "}
               <div className="w-[1px] h-3 bg-zinc-200 dark:bg-zinc-800 mx-2" />{" "}
               <Search size={12} /> 滚轮缩放

@@ -36,17 +36,6 @@ jobs:
       - name: Build gallery
         run: npm run build
 
-      - name: Install picsoul dependencies
-        run: npm install
-        working-directory: picsoul
-
-      - name: Build picsoul
-        run: npm run build
-        working-directory: picsoul
-
-      - name: Copy picsoul build to dist
-        run: cp -r picsoul/dist dist/picsoul
-
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
