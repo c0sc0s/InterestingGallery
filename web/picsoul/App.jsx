@@ -25,21 +25,51 @@ import {
   FileJson,
   X,
   Eraser,
+  Paintbrush,
 } from "lucide-react";
 
 const workerScript = `
 self.onmessage = function(e) {
-  const { imageData, width, height, pixelSize, tolerance, isFilterActive, bgColor, protectionZones, erasedBlocks } = e.data;
+  const { imageData, width, height, pixelSize, hueTolerance, lightTolerance, isFilterActive, bgColor, protectionZones, erasedBlocks } = e.data;
   const erasedSet = new Set(erasedBlocks.map(b => b.x + ',' + b.y));
   const data = imageData.data;
   const newPixelData = [];
   const resultPixels = new Uint8ClampedArray(width * height * 4);
 
-  function getColorDistance(r1, g1, b1, r2, g2, b2) {
-    return Math.sqrt(Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2));
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+      else if (max === g) h = ((b - r) / d + 2) / 6;
+      else h = ((r - g) / d + 4) / 6;
+    }
+    return { h: h * 360, s: s * 100, l: l * 100 };
+  }
+
+  function hueDistance(h1, h2) {
+    const d = Math.abs(h1 - h2);
+    return Math.min(d, 360 - d);
+  }
+
+  function isPointInPolygon(px, py, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+      if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+    return inside;
   }
 
   const pSize = Math.max(1, pixelSize);
+  const targetHsl = rgbToHsl(bgColor.r, bgColor.g, bgColor.b);
+  const targetIsGray = targetHsl.s < 10;
 
   for (let y = 0; y < height; y += pSize) {
     for (let x = 0; x < width; x += pSize) {
@@ -61,20 +91,32 @@ self.onmessage = function(e) {
 
       let isInProtection = false;
       for (const zone of protectionZones) {
-        const minX = Math.min(zone.x1, zone.x2);
-        const maxX = Math.max(zone.x1, zone.x2);
-        const minY = Math.min(zone.y1, zone.y2);
-        const maxY = Math.max(zone.y1, zone.y2);
-        if (lx >= minX && lx <= maxX && ly >= minY && ly <= maxY) {
-          isInProtection = true;
-          break;
+        if (zone.type === 'lasso') {
+          if (isPointInPolygon(x + pSize / 2, y + pSize / 2, zone.points)) {
+            isInProtection = true;
+            break;
+          }
+        } else {
+          const minX = Math.min(zone.x1, zone.x2);
+          const maxX = Math.max(zone.x1, zone.x2);
+          const minY = Math.min(zone.y1, zone.y2);
+          const maxY = Math.max(zone.y1, zone.y2);
+          if (lx >= minX && lx <= maxX && ly >= minY && ly <= maxY) {
+            isInProtection = true;
+            break;
+          }
         }
       }
 
       let isTransparent = false;
       if (isFilterActive && !isInProtection) {
-        const dist = getColorDistance(avgR, avgG, avgB, bgColor.r, bgColor.g, bgColor.b);
-        if (dist <= tolerance) isTransparent = true;
+        const pHsl = rgbToHsl(avgR, avgG, avgB);
+        const lDist = Math.abs(pHsl.l - targetHsl.l);
+        if (targetIsGray) {
+          if (pHsl.s < 10 && lDist <= lightTolerance) isTransparent = true;
+        } else if (pHsl.s >= 5 && hueDistance(pHsl.h, targetHsl.h) <= hueTolerance && lDist <= lightTolerance) {
+          isTransparent = true;
+        }
       }
 
       if (erasedSet.has(lx + ',' + ly)) isTransparent = true;
@@ -143,7 +185,8 @@ const App = () => {
   const [image, setImage] = useState(null);
   const [originalSize, setOriginalSize] = useState({ width: 0, height: 0 });
   const [pixelSize, setPixelSize] = useState(10);
-  const [tolerance, setTolerance] = useState(30);
+  const [hueTolerance, setHueTolerance] = useState(30);
+  const [lightTolerance, setLightTolerance] = useState(50);
   const [contrast, setContrast] = useState(0);
   const [saturation, setSaturation] = useState(0);
   const [bgColor, setBgColor] = useState({ r: 255, g: 255, b: 255 });
@@ -156,12 +199,15 @@ const App = () => {
   const [isSelectingROI, setIsSelectingROI] = useState(false);
   const [protectionZones, setProtectionZones] = useState([]);
   const [currentDragZone, setCurrentDragZone] = useState(null);
+  const [isDrawingLasso, setIsDrawingLasso] = useState(false);
+  const [currentLassoPath, setCurrentLassoPath] = useState([]);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [isEraserActive, setIsEraserActive] = useState(false);
   const [erasedBlocks, setErasedBlocks] = useState([]);
+  const [eraserSize, setEraserSize] = useState(1);
 
   const canvasRef = useRef(null);
   const viewportRef = useRef(null);
@@ -169,7 +215,7 @@ const App = () => {
   const startTimeRef = useRef(0);
   const fileInputRef = useRef(null);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
-  const isEraserDraggingRef = useRef(false);
+  const isBrushDraggingRef = useRef(false);
 
   const [pixelDataPoints, setPixelData] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -222,7 +268,8 @@ const App = () => {
         width: originalSize.width,
         height: originalSize.height,
         pixelSize,
-        tolerance,
+        hueTolerance,
+        lightTolerance,
         isFilterActive,
         bgColor,
         protectionZones,
@@ -234,7 +281,8 @@ const App = () => {
     image,
     originalSize,
     pixelSize,
-    tolerance,
+    hueTolerance,
+    lightTolerance,
     isFilterActive,
     bgColor,
     protectionZones,
@@ -328,6 +376,31 @@ const App = () => {
     return { x, y };
   };
 
+  const getBlocksInArea = (centerLx, centerLy, size) => {
+    const blocks = [];
+    const half = Math.floor((size - 1) / 2);
+    for (let dy = -half; dy < size - half; dy++) {
+      for (let dx = -half; dx < size - half; dx++) {
+        blocks.push({ x: centerLx + dx, y: centerLy + dy });
+      }
+    }
+    return blocks;
+  };
+
+  const addUniqueBlocks = (prev, newBlocks) => {
+    const existing = new Set(prev.map((b) => `${b.x},${b.y}`));
+    const toAdd = newBlocks.filter((b) => !existing.has(`${b.x},${b.y}`));
+    return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+  };
+
+  const deactivateAllTools = () => {
+    setIsDropperActive(false);
+    setIsEraserActive(false);
+    setIsSelectingROI(false);
+    setIsDrawingLasso(false);
+    setCurrentLassoPath([]);
+  };
+
   const handlePointerDown = (e) => {
     if (!image) return;
     setMobilePanelOpen(false);
@@ -346,14 +419,20 @@ const App = () => {
 
     if (isEraserActive) {
       e.currentTarget.setPointerCapture(e.pointerId);
-      isEraserDraggingRef.current = true;
+      isBrushDraggingRef.current = true;
       const { x, y } = getCanvasCoords(e.clientX, e.clientY);
       const lx = Math.floor(x / (pixelSize || 1));
       const ly = Math.floor(y / (pixelSize || 1));
-      setErasedBlocks((prev) => {
-        if (prev.some((b) => b.x === lx && b.y === ly)) return prev;
-        return [...prev, { x: lx, y: ly }];
-      });
+      const blocks = getBlocksInArea(lx, ly, eraserSize);
+      setErasedBlocks((prev) => addUniqueBlocks(prev, blocks));
+      return;
+    }
+
+    if (isDrawingLasso) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      isBrushDraggingRef.current = true;
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      setCurrentLassoPath([{ x, y }]);
       return;
     }
 
@@ -380,13 +459,22 @@ const App = () => {
   };
 
   const handlePointerMove = (e) => {
-    if (isEraserActive && isEraserDraggingRef.current) {
+    if (isEraserActive && isBrushDraggingRef.current) {
       const { x, y } = getCanvasCoords(e.clientX, e.clientY);
       const lx = Math.floor(x / (pixelSize || 1));
       const ly = Math.floor(y / (pixelSize || 1));
-      setErasedBlocks((prev) => {
-        if (prev.some((b) => b.x === lx && b.y === ly)) return prev;
-        return [...prev, { x: lx, y: ly }];
+      const blocks = getBlocksInArea(lx, ly, eraserSize);
+      setErasedBlocks((prev) => addUniqueBlocks(prev, blocks));
+      return;
+    }
+    if (isDrawingLasso && isBrushDraggingRef.current) {
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      setCurrentLassoPath((prev) => {
+        if (prev.length === 0) return [{ x, y }];
+        const last = prev[prev.length - 1];
+        const dist = Math.sqrt((x - last.x) ** 2 + (y - last.y) ** 2);
+        if (dist < Math.max(pixelSize * 0.4, 3)) return prev;
+        return [...prev, { x, y }];
       });
       return;
     }
@@ -406,8 +494,20 @@ const App = () => {
   };
 
   const handlePointerUp = () => {
-    isEraserDraggingRef.current = false;
+    isBrushDraggingRef.current = false;
     setIsDragging(false);
+
+    if (currentLassoPath.length >= 3) {
+      setProtectionZones((prev) => [
+        ...prev,
+        { id: Date.now(), type: "lasso", points: currentLassoPath },
+      ]);
+      setCurrentLassoPath([]);
+      setIsDrawingLasso(false);
+    } else if (currentLassoPath.length > 0) {
+      setCurrentLassoPath([]);
+    }
+
     if (currentDragZone) {
       setProtectionZones((p) => [...p, currentDragZone]);
       setCurrentDragZone(null);
@@ -443,6 +543,9 @@ const App = () => {
       setMobilePanelOpen(true);
     }
   };
+
+  const isBrushTool =
+    isDropperActive || isSelectingROI || isEraserActive || isDrawingLasso;
 
   const renderTabContent = () => {
     if (!image) {
@@ -514,8 +617,8 @@ const App = () => {
                 </div>
                 <button
                   onClick={() => {
-                    setIsDropperActive(!isDropperActive);
-                    setIsEraserActive(false);
+                    deactivateAllTools();
+                    setIsDropperActive(true);
                     setMobilePanelOpen(false);
                   }}
                   className={`w-full py-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-2 transition-all ${isDropperActive ? "bg-indigo-600 border-indigo-400 text-white animate-pulse" : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"}`}
@@ -525,40 +628,68 @@ const App = () => {
                 </button>
                 <div className="space-y-4 pt-2">
                   <div className="flex justify-between text-[11px] font-mono text-zinc-500">
-                    <span>过滤容差</span>
+                    <span>色相范围</span>
                     <span className="text-indigo-500 font-bold">
-                      {tolerance}
+                      ±{hueTolerance}°
                     </span>
                   </div>
                   <input
                     type="range"
                     min="0"
-                    max="150"
-                    value={tolerance}
-                    onChange={(e) => setTolerance(parseInt(e.target.value))}
+                    max="180"
+                    value={hueTolerance}
+                    onChange={(e) => setHueTolerance(parseInt(e.target.value))}
+                    className="pixel-range"
+                  />
+                  <div className="flex justify-between text-[11px] font-mono text-zinc-500 pt-2">
+                    <span>亮度范围</span>
+                    <span className="text-indigo-500 font-bold">
+                      ±{lightTolerance}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={lightTolerance}
+                    onChange={(e) => setLightTolerance(parseInt(e.target.value))}
                     className="pixel-range"
                   />
                 </div>
               </ControlCard>
             </div>
+
             <div className="space-y-4">
               <div className="flex items-center justify-between text-zinc-400 font-black uppercase text-[10px] tracking-widest pl-1">
-                <span>多选区保护 (ROI)</span>
+                <span>保护区域</span>
                 <span className="text-amber-500">
                   {protectionZones.length}
                 </span>
               </div>
-              <button
-                onClick={() => {
-                  setIsSelectingROI(!isSelectingROI);
-                  setIsEraserActive(false);
-                  setMobilePanelOpen(false);
-                }}
-                className={`w-full py-3 rounded-2xl border text-[11px] font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${isSelectingROI ? "bg-amber-500 border-amber-400 text-white animate-pulse" : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"}`}
-              >
-                <Target size={14} />
-                {isSelectingROI ? "正在画布绘制..." : "添加保护选区"}
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    deactivateAllTools();
+                    setIsSelectingROI(true);
+                    setMobilePanelOpen(false);
+                  }}
+                  className={`py-2.5 rounded-xl border text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all ${isSelectingROI ? "bg-amber-500 border-amber-400 text-white animate-pulse" : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800"}`}
+                >
+                  <Target size={12} />
+                  {isSelectingROI ? "绘制中..." : "矩形选区"}
+                </button>
+                <button
+                  onClick={() => {
+                    deactivateAllTools();
+                    setIsDrawingLasso(true);
+                    setMobilePanelOpen(false);
+                  }}
+                  className={`py-2.5 rounded-xl border text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all ${isDrawingLasso ? "bg-amber-500 border-amber-400 text-white animate-pulse" : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800"}`}
+                >
+                  <Paintbrush size={12} />
+                  {isDrawingLasso ? "绘制中..." : "套索绘制"}
+                </button>
+              </div>
               <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
                 {protectionZones.map((z, i) => (
                   <div
@@ -567,7 +698,7 @@ const App = () => {
                   >
                     <div className="flex items-center gap-2 text-[10px] font-mono font-bold text-zinc-500">
                       <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      Zone #{i + 1}
+                      {z.type === "lasso" ? `套索 #${i + 1}` : `矩形 #${i + 1}`}
                     </div>
                     <button
                       onClick={() =>
@@ -582,7 +713,17 @@ const App = () => {
                   </div>
                 ))}
               </div>
+              {protectionZones.length > 0 && (
+                <button
+                  onClick={() => setProtectionZones([])}
+                  className="w-full py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-500 hover:text-amber-500 hover:border-amber-300 transition-all flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={12} />
+                  清除所有保护
+                </button>
+              )}
             </div>
+
             <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
               <div className="flex items-center justify-between text-zinc-400 font-black uppercase text-[10px] tracking-widest pl-1">
                 <span>橡皮擦工具</span>
@@ -590,9 +731,8 @@ const App = () => {
               </div>
               <button
                 onClick={() => {
-                  setIsEraserActive(!isEraserActive);
-                  setIsDropperActive(false);
-                  setIsSelectingROI(false);
+                  deactivateAllTools();
+                  setIsEraserActive(true);
                   setMobilePanelOpen(false);
                 }}
                 className={`w-full py-3 rounded-2xl border text-[11px] font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${isEraserActive ? "bg-rose-500 border-rose-400 text-white animate-pulse" : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"}`}
@@ -600,6 +740,24 @@ const App = () => {
                 <Eraser size={14} />
                 {isEraserActive ? "擦除中..." : "启动橡皮擦"}
               </button>
+              {(isEraserActive || erasedBlocks.length > 0) && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[11px] font-mono text-zinc-500">
+                    <span>擦除大小</span>
+                    <span className="text-rose-500 font-bold">
+                      {eraserSize}×{eraserSize}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={eraserSize}
+                    onChange={(e) => setEraserSize(parseInt(e.target.value))}
+                    className="pixel-range"
+                  />
+                </div>
+              )}
               {erasedBlocks.length > 0 && (
                 <button
                   onClick={() => setErasedBlocks([])}
@@ -847,7 +1005,7 @@ const App = () => {
                   ref={canvasRef}
                   width={originalSize.width || 1}
                   height={originalSize.height || 1}
-                  className={`block transition-opacity duration-300 ${isProcessing ? "opacity-40" : "opacity-100"} ${isDropperActive || isSelectingROI || isEraserActive ? "cursor-crosshair" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                  className={`block transition-opacity duration-300 ${isProcessing ? "opacity-40" : "opacity-100"} ${isBrushTool ? "cursor-crosshair" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}
                 />
 
                 {showGrid && (
@@ -879,18 +1037,54 @@ const App = () => {
                     }}
                   />
                 )}
-                {protectionZones.map((z) => (
-                  <div
-                    key={z.id}
-                    className="absolute border border-dashed border-amber-500/40 bg-amber-500/5 pointer-events-none z-10"
-                    style={{
-                      left: Math.min(z.x1, z.x2) * pixelSize || 0,
-                      top: Math.min(z.y1, z.y2) * pixelSize || 0,
-                      width: Math.abs(z.x2 - z.x1) * pixelSize || 0,
-                      height: Math.abs(z.y2 - z.y1) * pixelSize || 0,
-                    }}
-                  />
-                ))}
+                {protectionZones
+                  .filter((z) => z.type !== "lasso")
+                  .map((z) => (
+                    <div
+                      key={z.id}
+                      className="absolute border border-dashed border-amber-500/40 bg-amber-500/5 pointer-events-none z-10"
+                      style={{
+                        left: Math.min(z.x1, z.x2) * pixelSize || 0,
+                        top: Math.min(z.y1, z.y2) * pixelSize || 0,
+                        width: Math.abs(z.x2 - z.x1) * pixelSize || 0,
+                        height: Math.abs(z.y2 - z.y1) * pixelSize || 0,
+                      }}
+                    />
+                  ))}
+
+                <svg
+                  className="absolute top-0 left-0 pointer-events-none z-10"
+                  width={originalSize.width}
+                  height={originalSize.height}
+                  viewBox={`0 0 ${originalSize.width} ${originalSize.height}`}
+                >
+                  {protectionZones
+                    .filter((z) => z.type === "lasso")
+                    .map((z) => (
+                      <polygon
+                        key={z.id}
+                        points={z.points
+                          .map((p) => `${p.x},${p.y}`)
+                          .join(" ")}
+                        fill="rgba(251,191,36,0.08)"
+                        stroke="rgba(251,191,36,0.5)"
+                        strokeWidth="1.5"
+                        strokeDasharray="6 3"
+                      />
+                    ))}
+                  {currentLassoPath.length > 1 && (
+                    <polyline
+                      points={currentLassoPath
+                        .map((p) => `${p.x},${p.y}`)
+                        .join(" ")}
+                      fill="none"
+                      stroke="rgba(251,191,36,0.9)"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                </svg>
 
                 {isProcessing && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/20 backdrop-blur-[1px] z-50 transition-all">
@@ -954,13 +1148,15 @@ const App = () => {
               <span>
                 {isEraserActive
                   ? "Eraser Tool"
-                  : isDropperActive
-                    ? "Dropper Tool"
-                    : isSelectingROI
-                      ? "ROI Designer"
-                      : isDragging
-                        ? "Panning View"
-                        : "Engine Ready"}
+                  : isDrawingLasso
+                    ? "Lasso Tool"
+                    : isDropperActive
+                      ? "Dropper Tool"
+                      : isSelectingROI
+                        ? "ROI Designer"
+                        : isDragging
+                          ? "Panning View"
+                          : "Engine Ready"}
               </span>
             </div>
             <div className="flex items-center gap-4">
