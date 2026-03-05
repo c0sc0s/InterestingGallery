@@ -18,6 +18,7 @@ export default defineConfig({
         calculator: resolve(__dirname, 'web/Calculator/index.html'),
         videoPlayer: resolve(__dirname, 'web/vedioPlayer/index.html'),
         memoryGame: resolve(__dirname, 'web/memoryGame/index.html'),
+        picsoul: resolve(__dirname, 'web/picsoul/index.html'),
       },
     },
   },
