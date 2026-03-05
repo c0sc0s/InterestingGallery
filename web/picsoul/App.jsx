@@ -24,11 +24,13 @@ import {
   FileImage,
   FileJson,
   X,
+  Eraser,
 } from "lucide-react";
 
 const workerScript = `
 self.onmessage = function(e) {
-  const { imageData, width, height, pixelSize, tolerance, isFilterActive, bgColor, protectionZones } = e.data;
+  const { imageData, width, height, pixelSize, tolerance, isFilterActive, bgColor, protectionZones, erasedBlocks } = e.data;
+  const erasedSet = new Set(erasedBlocks.map(b => b.x + ',' + b.y));
   const data = imageData.data;
   const newPixelData = [];
   const resultPixels = new Uint8ClampedArray(width * height * 4);
@@ -75,6 +77,7 @@ self.onmessage = function(e) {
         if (dist <= tolerance) isTransparent = true;
       }
 
+      if (erasedSet.has(lx + ',' + ly)) isTransparent = true;
       const alpha = isTransparent ? 0 : 255;
       if (!isTransparent) {
         newPixelData.push({ x: lx, y: ly, hex: "#" + ((1 << 24) + (avgR << 16) + (avgG << 8) + avgB).toString(16).slice(1) });
@@ -156,6 +159,9 @@ const App = () => {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  const [isEraserActive, setIsEraserActive] = useState(false);
+  const [erasedBlocks, setErasedBlocks] = useState([]);
 
   const canvasRef = useRef(null);
   const viewportRef = useRef(null);
@@ -163,6 +169,7 @@ const App = () => {
   const startTimeRef = useRef(0);
   const fileInputRef = useRef(null);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const isEraserDraggingRef = useRef(false);
 
   const [pixelDataPoints, setPixelData] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -219,6 +226,7 @@ const App = () => {
         isFilterActive,
         bgColor,
         protectionZones,
+        erasedBlocks,
       });
     }, 150);
     return () => clearTimeout(timer);
@@ -230,6 +238,7 @@ const App = () => {
     isFilterActive,
     bgColor,
     protectionZones,
+    erasedBlocks,
     contrast,
     saturation,
   ]);
@@ -247,6 +256,42 @@ const App = () => {
     };
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
+  }, [image]);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || !image) return;
+    let lastTouchDist = null;
+    const handleTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        lastTouchDist = Math.sqrt(dx * dx + dy * dy);
+      }
+    };
+    const handleTouchMove = (e) => {
+      if (e.touches.length === 2 && lastTouchDist !== null) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        setScale((prev) =>
+          Math.min(Math.max(prev * (dist / lastTouchDist), 0.01), 100),
+        );
+        lastTouchDist = dist;
+      }
+    };
+    const handleTouchEnd = () => {
+      lastTouchDist = null;
+    };
+    el.addEventListener("touchstart", handleTouchStart, { passive: false });
+    el.addEventListener("touchmove", handleTouchMove, { passive: false });
+    el.addEventListener("touchend", handleTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchmove", handleTouchMove);
+      el.removeEventListener("touchend", handleTouchEnd);
+    };
   }, [image]);
 
   const fitToScreen = useCallback((w, h) => {
@@ -267,6 +312,7 @@ const App = () => {
         setImage(img);
         setOriginalSize({ width: img.width, height: img.height });
         setProtectionZones([]);
+        setErasedBlocks([]);
         fitToScreen(img.width, img.height);
       };
       img.src = URL.createObjectURL(file);
@@ -284,6 +330,7 @@ const App = () => {
 
   const handlePointerDown = (e) => {
     if (!image) return;
+    setMobilePanelOpen(false);
 
     if (isDropperActive) {
       const { x, y } = getCanvasCoords(e.clientX, e.clientY);
@@ -294,6 +341,19 @@ const App = () => {
       setBgColor({ r: p[0], g: p[1], b: p[2] });
       setIsFilterActive(true);
       setIsDropperActive(false);
+      return;
+    }
+
+    if (isEraserActive) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      isEraserDraggingRef.current = true;
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      const lx = Math.floor(x / (pixelSize || 1));
+      const ly = Math.floor(y / (pixelSize || 1));
+      setErasedBlocks((prev) => {
+        if (prev.some((b) => b.x === lx && b.y === ly)) return prev;
+        return [...prev, { x: lx, y: ly }];
+      });
       return;
     }
 
@@ -320,6 +380,16 @@ const App = () => {
   };
 
   const handlePointerMove = (e) => {
+    if (isEraserActive && isEraserDraggingRef.current) {
+      const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+      const lx = Math.floor(x / (pixelSize || 1));
+      const ly = Math.floor(y / (pixelSize || 1));
+      setErasedBlocks((prev) => {
+        if (prev.some((b) => b.x === lx && b.y === ly)) return prev;
+        return [...prev, { x: lx, y: ly }];
+      });
+      return;
+    }
     if (currentDragZone) {
       const { x, y } = getCanvasCoords(e.clientX, e.clientY);
       const lx = x / (pixelSize || 1);
@@ -336,6 +406,7 @@ const App = () => {
   };
 
   const handlePointerUp = () => {
+    isEraserDraggingRef.current = false;
     setIsDragging(false);
     if (currentDragZone) {
       setProtectionZones((p) => [...p, currentDragZone]);
@@ -357,6 +428,281 @@ const App = () => {
     a.click();
   };
 
+  const tabs = [
+    { id: "sampling", icon: Grid3X3, label: "采样" },
+    { id: "filter", icon: Zap, label: "过滤" },
+    { id: "enhance", icon: SlidersHorizontal, label: "增强" },
+    { id: "export", icon: Download, label: "导出" },
+  ];
+
+  const handleMobileTabClick = (tabId) => {
+    if (activeTab === tabId && mobilePanelOpen) {
+      setMobilePanelOpen(false);
+    } else {
+      setActiveTab(tabId);
+      setMobilePanelOpen(true);
+    }
+  };
+
+  const renderTabContent = () => {
+    if (!image) {
+      return (
+        <div
+          className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-zinc-300 dark:text-zinc-700 animate-pulse cursor-pointer"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <ImageIcon size={32} className="mb-2 opacity-20" />
+          <span className="text-[10px] font-black uppercase tracking-widest">
+            等待导入图像
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {activeTab === "sampling" && (
+          <>
+            <ControlCard
+              title="网格步长控制"
+              onReset={() => setPixelSize(10)}
+            >
+              <div className="flex justify-between text-[11px] font-mono text-zinc-500">
+                <span>步长尺寸</span>
+                <span className="text-indigo-500 font-bold">
+                  {pixelSize}px
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="60"
+                value={pixelSize}
+                onChange={(e) => setPixelSize(parseInt(e.target.value))}
+                className="pixel-range"
+              />
+            </ControlCard>
+            <CompactToggle
+              label="显示网格辅助线"
+              icon={Eye}
+              active={showGrid}
+              onClick={() => setShowGrid(!showGrid)}
+            />
+          </>
+        )}
+
+        {activeTab === "filter" && (
+          <>
+            <CompactToggle
+              label="开启透明度过滤"
+              icon={Zap}
+              active={isFilterActive}
+              onClick={() => setIsFilterActive(!isFilterActive)}
+            />
+            <div
+              className={`space-y-6 transition-all ${!isFilterActive && "opacity-40 pointer-events-none grayscale"}`}
+            >
+              <ControlCard title="目标基准色">
+                <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400 uppercase">
+                  <span>颜色状态</span>
+                  <div
+                    className="w-8 h-8 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm"
+                    style={{
+                      background: `rgb(${bgColor.r},${bgColor.g},${bgColor.b})`,
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    setIsDropperActive(!isDropperActive);
+                    setIsEraserActive(false);
+                    setMobilePanelOpen(false);
+                  }}
+                  className={`w-full py-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-2 transition-all ${isDropperActive ? "bg-indigo-600 border-indigo-400 text-white animate-pulse" : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"}`}
+                >
+                  <Pipette size={14} />
+                  {isDropperActive ? "选取中..." : "启动吸管工具"}
+                </button>
+                <div className="space-y-4 pt-2">
+                  <div className="flex justify-between text-[11px] font-mono text-zinc-500">
+                    <span>过滤容差</span>
+                    <span className="text-indigo-500 font-bold">
+                      {tolerance}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="150"
+                    value={tolerance}
+                    onChange={(e) => setTolerance(parseInt(e.target.value))}
+                    className="pixel-range"
+                  />
+                </div>
+              </ControlCard>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-zinc-400 font-black uppercase text-[10px] tracking-widest pl-1">
+                <span>多选区保护 (ROI)</span>
+                <span className="text-amber-500">
+                  {protectionZones.length}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setIsSelectingROI(!isSelectingROI);
+                  setIsEraserActive(false);
+                  setMobilePanelOpen(false);
+                }}
+                className={`w-full py-3 rounded-2xl border text-[11px] font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${isSelectingROI ? "bg-amber-500 border-amber-400 text-white animate-pulse" : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"}`}
+              >
+                <Target size={14} />
+                {isSelectingROI ? "正在画布绘制..." : "添加保护选区"}
+              </button>
+              <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                {protectionZones.map((z, i) => (
+                  <div
+                    key={z.id}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm group"
+                  >
+                    <div className="flex items-center gap-2 text-[10px] font-mono font-bold text-zinc-500">
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      Zone #{i + 1}
+                    </div>
+                    <button
+                      onClick={() =>
+                        setProtectionZones((p) =>
+                          p.filter((x) => x.id !== z.id),
+                        )
+                      }
+                      className="text-zinc-400 hover:text-red-500 transition-colors md:opacity-0 md:group-hover:opacity-100"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center justify-between text-zinc-400 font-black uppercase text-[10px] tracking-widest pl-1">
+                <span>橡皮擦工具</span>
+                <span className="text-rose-500">{erasedBlocks.length}</span>
+              </div>
+              <button
+                onClick={() => {
+                  setIsEraserActive(!isEraserActive);
+                  setIsDropperActive(false);
+                  setIsSelectingROI(false);
+                  setMobilePanelOpen(false);
+                }}
+                className={`w-full py-3 rounded-2xl border text-[11px] font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${isEraserActive ? "bg-rose-500 border-rose-400 text-white animate-pulse" : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"}`}
+              >
+                <Eraser size={14} />
+                {isEraserActive ? "擦除中..." : "启动橡皮擦"}
+              </button>
+              {erasedBlocks.length > 0 && (
+                <button
+                  onClick={() => setErasedBlocks([])}
+                  className="w-full py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 text-[11px] font-bold text-zinc-500 hover:text-rose-500 hover:border-rose-300 transition-all flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={12} />
+                  清除所有擦除 ({erasedBlocks.length})
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === "enhance" && (
+          <ControlCard
+            title="后处理渲染"
+            onReset={() => {
+              setContrast(0);
+              setSaturation(0);
+            }}
+          >
+            <div className="space-y-6 py-2">
+              <div className="space-y-3">
+                <div className="flex justify-between text-[11px] font-mono text-zinc-500">
+                  <span>对比度</span>
+                  <span className="text-indigo-500 font-bold">
+                    {contrast}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-50"
+                  max="100"
+                  value={contrast}
+                  onChange={(e) => setContrast(parseInt(e.target.value))}
+                  className="pixel-range"
+                />
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between text-[11px] font-mono text-zinc-500">
+                  <span>饱和度</span>
+                  <span className="text-indigo-500 font-bold">
+                    {saturation}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="-100"
+                  max="100"
+                  value={saturation}
+                  onChange={(e) => setSaturation(parseInt(e.target.value))}
+                  className="pixel-range"
+                />
+              </div>
+            </div>
+          </ControlCard>
+        )}
+
+        {activeTab === "export" && (
+          <div className="space-y-4">
+            <button
+              onClick={downloadPNG}
+              className="w-full flex flex-col items-center justify-center gap-4 p-8 bg-indigo-600 hover:bg-indigo-500 text-white rounded-3xl transition-all group shadow-xl active:scale-95"
+            >
+              <FileImage
+                size={32}
+                className="group-hover:scale-110 transition-transform"
+              />
+              <span className="text-xs font-black uppercase tracking-widest italic">
+                导出高清像素图 (PNG)
+              </span>
+            </button>
+            <button
+              onClick={() => {
+                const json = JSON.stringify(
+                  { metadata: originalSize, pixels: pixelDataPoints },
+                  null,
+                  2,
+                );
+                const blob = new Blob([json], {
+                  type: "application/json",
+                });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "pixel_data.json";
+                a.click();
+              }}
+              className="w-full flex flex-col items-center justify-center gap-4 p-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-3xl border border-zinc-700 transition-all group shadow-lg active:scale-95"
+            >
+              <FileJson
+                size={32}
+                className="group-hover:scale-110 transition-transform"
+              />
+              <span className="text-xs font-black uppercase tracking-widest italic">
+                导出点阵数据 (JSON)
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const gridColor =
     theme === "dark" ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.15)";
 
@@ -364,7 +710,7 @@ const App = () => {
     <div
       className={`${theme} h-screen flex flex-col font-sans transition-colors duration-300 bg-white dark:bg-[#09090b] text-zinc-900 dark:text-zinc-50 overflow-hidden`}
     >
-      <header className="h-14 border-b flex items-center justify-between px-6 z-40 bg-white dark:bg-[#09090b] border-zinc-200 dark:border-zinc-800 shadow-sm">
+      <header className="h-14 border-b flex items-center justify-between px-3 md:px-6 z-40 bg-white dark:bg-[#09090b] border-zinc-200 dark:border-zinc-800 shadow-sm">
         <div className="flex items-center gap-4">
           <div
             className="flex items-center gap-2 cursor-pointer group"
@@ -429,14 +775,9 @@ const App = () => {
       </header>
 
       <main className="flex flex-1 overflow-hidden">
-        <aside className="w-[320px] border-r flex flex-col bg-zinc-50/50 dark:bg-[#09090b] border-zinc-200 dark:border-zinc-800 z-30 shadow-2xl transition-colors">
+        <aside className="hidden md:flex w-[320px] border-r flex-col bg-zinc-50/50 dark:bg-[#09090b] border-zinc-200 dark:border-zinc-800 z-30 shadow-2xl transition-colors">
           <div className="grid grid-cols-4 p-1 m-4 rounded-2xl bg-zinc-200/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-inner">
-            {[
-              { id: "sampling", icon: Grid3X3, label: "采样" },
-              { id: "filter", icon: Zap, label: "过滤" },
-              { id: "enhance", icon: SlidersHorizontal, label: "增强" },
-              { id: "export", icon: Download, label: "导出" },
-            ].map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -449,226 +790,7 @@ const App = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 space-y-6 custom-scrollbar pb-10">
-            {image ? (
-              <div className="animate-in fade-in slide-in-from-left-4 duration-500 space-y-6">
-                {activeTab === "sampling" && (
-                  <>
-                    <ControlCard
-                      title="网格步长控制"
-                      onReset={() => setPixelSize(10)}
-                    >
-                      <div className="flex justify-between text-[11px] font-mono text-zinc-500">
-                        <span>步长尺寸</span>
-                        <span className="text-indigo-500 font-bold">
-                          {pixelSize}px
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="1"
-                        max="60"
-                        value={pixelSize}
-                        onChange={(e) => setPixelSize(parseInt(e.target.value))}
-                        className="pixel-range"
-                      />
-                    </ControlCard>
-                    <CompactToggle
-                      label="显示网格辅助线"
-                      icon={Eye}
-                      active={showGrid}
-                      onClick={() => setShowGrid(!showGrid)}
-                    />
-                  </>
-                )}
-
-                {activeTab === "filter" && (
-                  <>
-                    <CompactToggle
-                      label="开启透明度过滤"
-                      icon={Zap}
-                      active={isFilterActive}
-                      onClick={() => setIsFilterActive(!isFilterActive)}
-                    />
-                    <div
-                      className={`space-y-6 transition-all ${!isFilterActive && "opacity-40 pointer-events-none grayscale"}`}
-                    >
-                      <ControlCard title="目标基准色">
-                        <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400 uppercase">
-                          <span>颜色状态</span>
-                          <div
-                            className="w-8 h-8 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm"
-                            style={{
-                              background: `rgb(${bgColor.r},${bgColor.g},${bgColor.b})`,
-                            }}
-                          />
-                        </div>
-                        <button
-                          onClick={() => setIsDropperActive(!isDropperActive)}
-                          className={`w-full py-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-2 transition-all ${isDropperActive ? "bg-indigo-600 border-indigo-400 text-white animate-pulse" : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"}`}
-                        >
-                          <Pipette size={14} />
-                          {isDropperActive ? "选取中..." : "启动吸管工具"}
-                        </button>
-                        <div className="space-y-4 pt-2">
-                          <div className="flex justify-between text-[11px] font-mono text-zinc-500">
-                            <span>过滤容差</span>
-                            <span className="text-indigo-500 font-bold">
-                              {tolerance}
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min="0"
-                            max="150"
-                            value={tolerance}
-                            onChange={(e) =>
-                              setTolerance(parseInt(e.target.value))
-                            }
-                            className="pixel-range"
-                          />
-                        </div>
-                      </ControlCard>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between text-zinc-400 font-black uppercase text-[10px] tracking-widest pl-1">
-                        <span>多选区保护 (ROI)</span>
-                        <span className="text-amber-500">
-                          {protectionZones.length}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setIsSelectingROI(!isSelectingROI)}
-                        className={`w-full py-3 rounded-2xl border text-[11px] font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${isSelectingROI ? "bg-amber-500 border-amber-400 text-white animate-pulse" : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"}`}
-                      >
-                        <Target size={14} />
-                        {isSelectingROI ? "正在画布绘制..." : "添加保护选区"}
-                      </button>
-                      <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                        {protectionZones.map((z, i) => (
-                          <div
-                            key={z.id}
-                            className="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm group"
-                          >
-                            <div className="flex items-center gap-2 text-[10px] font-mono font-bold text-zinc-500">
-                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              Zone #{i + 1}
-                            </div>
-                            <button
-                              onClick={() =>
-                                setProtectionZones((p) =>
-                                  p.filter((x) => x.id !== z.id),
-                                )
-                              }
-                              className="text-zinc-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {activeTab === "enhance" && (
-                  <ControlCard
-                    title="后处理渲染"
-                    onReset={() => {
-                      setContrast(0);
-                      setSaturation(0);
-                    }}
-                  >
-                    <div className="space-y-6 py-2">
-                      <div className="space-y-3">
-                        <div className="flex justify-between text-[11px] font-mono text-zinc-500">
-                          <span>对比度</span>
-                          <span className="text-indigo-500 font-bold">
-                            {contrast}%
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="-50"
-                          max="100"
-                          value={contrast}
-                          onChange={(e) =>
-                            setContrast(parseInt(e.target.value))
-                          }
-                          className="pixel-range"
-                        />
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex justify-between text-[11px] font-mono text-zinc-500">
-                          <span>饱和度</span>
-                          <span className="text-indigo-500 font-bold">
-                            {saturation}%
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="-100"
-                          max="100"
-                          value={saturation}
-                          onChange={(e) =>
-                            setSaturation(parseInt(e.target.value))
-                          }
-                          className="pixel-range"
-                        />
-                      </div>
-                    </div>
-                  </ControlCard>
-                )}
-
-                {activeTab === "export" && (
-                  <div className="space-y-4">
-                    <button
-                      onClick={downloadPNG}
-                      className="w-full flex flex-col items-center justify-center gap-4 p-8 bg-indigo-600 hover:bg-indigo-500 text-white rounded-3xl transition-all group shadow-xl active:scale-95"
-                    >
-                      <FileImage
-                        size={32}
-                        className="group-hover:scale-110 transition-transform"
-                      />
-                      <span className="text-xs font-black uppercase tracking-widest italic">
-                        导出高清像素图 (PNG)
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        const json = JSON.stringify(
-                          { metadata: originalSize, pixels: pixelDataPoints },
-                          null,
-                          2,
-                        );
-                        const blob = new Blob([json], {
-                          type: "application/json",
-                        });
-                        const a = document.createElement("a");
-                        a.href = URL.createObjectURL(blob);
-                        a.download = "pixel_data.json";
-                        a.click();
-                      }}
-                      className="w-full flex flex-col items-center justify-center gap-4 p-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-3xl border border-zinc-700 transition-all group shadow-lg active:scale-95"
-                    >
-                      <FileJson
-                        size={32}
-                        className="group-hover:scale-110 transition-transform"
-                      />
-                      <span className="text-xs font-black uppercase tracking-widest italic">
-                        导出点阵数据 (JSON)
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-zinc-300 dark:text-zinc-700 mt-4 animate-pulse">
-                <ImageIcon size={40} className="mb-2 opacity-20" />
-                <span className="text-[10px] font-black uppercase tracking-widest">
-                  等待导入图像
-                </span>
-              </div>
-            )}
+            {renderTabContent()}
           </div>
           <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 text-[9px] font-black uppercase tracking-widest flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -699,11 +821,11 @@ const App = () => {
               onClick={() => fileInputRef.current.click()}
               className="flex flex-col items-center gap-6 cursor-pointer group/upload transition-all active:scale-95"
             >
-              <div className="relative w-32 h-32 rounded-[3rem] border-2 flex items-center justify-center bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-2xl group-hover/upload:border-indigo-500 group-hover/upload:scale-105 transition-all text-zinc-200 dark:text-zinc-800 group-hover/upload:text-indigo-500">
+              <div className="relative w-24 h-24 md:w-32 md:h-32 rounded-[2rem] md:rounded-[3rem] border-2 flex items-center justify-center bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-2xl group-hover/upload:border-indigo-500 group-hover/upload:scale-105 transition-all text-zinc-200 dark:text-zinc-800 group-hover/upload:text-indigo-500">
                 <Upload size={40} />
               </div>
               <div className="text-center font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-700 italic">
-                <h2 className="text-xl">Initialization Required</h2>
+                <h2 className="text-lg md:text-xl">Initialization Required</h2>
                 <p className="text-[10px] mt-2 tracking-[0.4em]">
                   Engine Standby
                 </p>
@@ -725,7 +847,7 @@ const App = () => {
                   ref={canvasRef}
                   width={originalSize.width || 1}
                   height={originalSize.height || 1}
-                  className={`block transition-opacity duration-300 ${isProcessing ? "opacity-40" : "opacity-100"} ${isDropperActive || isSelectingROI ? "cursor-crosshair" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+                  className={`block transition-opacity duration-300 ${isProcessing ? "opacity-40" : "opacity-100"} ${isDropperActive || isSelectingROI || isEraserActive ? "cursor-crosshair" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}
                 />
 
                 {showGrid && (
@@ -785,7 +907,7 @@ const App = () => {
           )}
 
           {image && (
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-zinc-200 dark:border-zinc-800 shadow-lg text-[9px] font-bold text-zinc-500 opacity-0 group-hover/viewport:opacity-100 transition-opacity">
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 hidden md:flex items-center gap-3 px-4 py-1.5 rounded-full border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-zinc-200 dark:border-zinc-800 shadow-lg text-[9px] font-bold text-zinc-500 opacity-0 group-hover/viewport:opacity-100 transition-opacity">
               <Hand size={12} /> 按住并拖拽可平移视图{" "}
               <div className="w-[1px] h-3 bg-zinc-200 dark:bg-zinc-800 mx-2" />{" "}
               <Search size={12} /> 滚轮缩放
@@ -793,7 +915,7 @@ const App = () => {
           )}
 
           {image && (
-            <div className="absolute bottom-12 right-8 flex items-center gap-3 px-4 py-2.5 rounded-2xl border bg-white/95 dark:bg-zinc-900/90 backdrop-blur-xl border-zinc-200 dark:border-zinc-800 shadow-2xl z-40 transition-all scale-90 md:scale-100">
+            <div className="absolute bottom-[104px] md:bottom-12 right-4 md:right-8 flex items-center gap-3 px-4 py-2.5 rounded-2xl border bg-white/95 dark:bg-zinc-900/90 backdrop-blur-xl border-zinc-200 dark:border-zinc-800 shadow-2xl z-40 transition-all scale-90 md:scale-100">
               <div className="flex items-center gap-3 pr-4 border-r border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-200">
                 <Search size={14} />
                 <span className="text-[11px] font-mono font-black min-w-[40px] text-right">
@@ -826,17 +948,19 @@ const App = () => {
             </div>
           )}
 
-          <div className="absolute bottom-0 left-0 right-0 h-8 border-t flex items-center justify-between px-6 z-40 bg-white dark:bg-[#09090b] border-zinc-200 dark:border-zinc-800 shadow-lg transition-colors text-zinc-500 dark:text-zinc-400 text-[9px] font-black uppercase tracking-widest">
+          <div className="absolute bottom-14 md:bottom-0 left-0 right-0 h-8 border-t flex items-center justify-between px-3 md:px-6 z-40 bg-white dark:bg-[#09090b] border-zinc-200 dark:border-zinc-800 shadow-lg transition-colors text-zinc-500 dark:text-zinc-400 text-[9px] font-black uppercase tracking-widest">
             <div className="flex items-center gap-4">
               <MousePointer2 size={10} />
               <span>
-                {isDropperActive
-                  ? "Dropper Tool"
-                  : isSelectingROI
-                    ? "ROI Designer"
-                    : isDragging
-                      ? "Panning View"
-                      : "Engine Ready"}
+                {isEraserActive
+                  ? "Eraser Tool"
+                  : isDropperActive
+                    ? "Dropper Tool"
+                    : isSelectingROI
+                      ? "ROI Designer"
+                      : isDragging
+                        ? "Panning View"
+                        : "Engine Ready"}
               </span>
             </div>
             <div className="flex items-center gap-4">
@@ -845,7 +969,7 @@ const App = () => {
                   <Target size={10} /> ROI Active
                 </span>
               )}
-              <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 Kernel v3.99-Stable
               </div>
@@ -853,6 +977,47 @@ const App = () => {
           </div>
         </div>
       </main>
+
+      {mobilePanelOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40 md:hidden"
+          onClick={() => setMobilePanelOpen(false)}
+        />
+      )}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50">
+        <div
+          className={`bg-white dark:bg-[#09090b] rounded-t-2xl shadow-2xl border-t border-zinc-200 dark:border-zinc-800 overflow-hidden transition-all duration-300 ease-out ${mobilePanelOpen ? "max-h-[60vh]" : "max-h-0 border-t-0"}`}
+        >
+          <div className="flex justify-center pt-2 pb-1">
+            <div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+          </div>
+          <div className="overflow-y-auto max-h-[calc(60vh-16px)] px-4 pb-4 space-y-4 custom-scrollbar">
+            {renderTabContent()}
+          </div>
+        </div>
+
+        <div
+          className="bg-white dark:bg-[#09090b] border-t border-zinc-200 dark:border-zinc-800"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        >
+          <div className="grid grid-cols-4 gap-1 px-2 py-1.5">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleMobileTabClick(tab.id)}
+                className={`flex flex-col items-center justify-center py-2 rounded-xl text-[10px] font-bold transition-all ${
+                  activeTab === tab.id && mobilePanelOpen
+                    ? "text-indigo-600 dark:text-indigo-400"
+                    : "text-zinc-400"
+                }`}
+              >
+                <tab.icon size={20} className="mb-0.5" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
